@@ -10,6 +10,8 @@
     "pg": "4.4.0",
     "pg-format": "1.0.2",
     "pg-native": "1.8.1",
+    "simplify-path": "1.1.0",
+    "underscore": "1.8.3",
     "ws": "1.1.1"
   },
   "devDependencies": {

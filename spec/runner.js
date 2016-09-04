@@ -1,8 +1,12 @@
 var assert = require('assert');
-var Socket = require('../src/socket');
-var Stream = require('../src/stream');
-var LocationMgr = require('../src/locationMgr');
+var async = require('async');
+var _ = require('underscore');
 var WebSocket = require('ws');
+
+var LocationMgr = require('../src/locationMgr');
+var Socket = require('../src/socket');
+var specLocations= require('./locations');
+var Stream = require('../src/stream');
 
 describe('Streaming Locations -> SVG', function() {
     var server;
@@ -29,24 +33,59 @@ describe('Streaming Locations -> SVG', function() {
         });
     });
 
-    describe('Stream Location', function() {
-        it('should stream a lat/lng pair to the WebSocket Server', function(done) {
-            var client = new WebSocket('ws://localhost:' + Socket.port);
-            var location = new LocationMgr.location({location: [-122.4135, 37.7858, 36], time: new Date()});
-            var message = Stream.compose(LocationMgr.stream.prefix, {
-                location: location,
-                object: 'spec'
+    describe('LocationMgr Ready', function() {
+        it('should prepare PSQL and create the SVG dir', function(done) {
+            LocationMgr.whenReady(function(err) {
+                assert.equal(null, err);
+                done();
             });
+        });
+    });
 
+    describe('Stream Locations', function() {
+        it('should stream lat/lng pairs to the WebSocket Server', function(done) {
+            var client = new WebSocket('ws://localhost:' + Socket.port);
             client.on('open', function() {
-                client.send(message, function(err) {
+                async.parallel(_.map(specLocations, function(locations, targetId) {
+                    return function(cb) {
+                        async.series(_.map(locations, function(coordinates) {
+                            return function(cb) {
+                                var location = new LocationMgr.location({
+                                    coordinates: coordinates,
+                                    time: new Date()
+                                });
+
+                                var message = Stream.compose(LocationMgr.stream.prefix, {
+                                    location: location,
+                                    targetId: targetId
+                                });
+
+                                client.send(message, function(err) {
+                                    setTimeout(function() {
+                                        cb(err);
+                                    }, 4);
+                                });
+                            };
+                        }), function(err) {
+                            setTimeout(function() {
+                                cb(err);
+                            }, 4);
+                        });
+                    }
+                }), function(err) {
                     assert.equal(null, err);
 
                     setTimeout(function() {
                         done();
-                    }, 10);
+                    }, 4);
                 });
             });
+        });
+    });
+
+    describe('Compute stream svg', function() {
+        it('should create svgs for active streams', function() {
+            LocationMgr.computeActiveStreamSvg();
         });
     });
 
