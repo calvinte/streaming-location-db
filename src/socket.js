@@ -89,7 +89,6 @@ function handleClientMessage(message) {
 
     if (streamPrefix && (stream = StreamMgr.streams[streamPrefix])) {
         stream.push(message.substr(StreamMgr.streamPrefixLength, maxMessageLength));
-        SocketLogger('client', 'message');
     } else {
         handleClientException(message);
     }

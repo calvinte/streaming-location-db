@@ -1,10 +1,13 @@
+"use strict"
+
 var async = require('async');
 var fs = require('fs');
+var d3 = require('d3');
+var geolib = require('geolib');
 var pg = require('pg').native;
 var _ = require('underscore');
 
 var LocationMgrLogger = require('./logger').Logger('locationMgr');
-var simplify = require('simplify-path');
 var StreamMgr = require('./stream');
 
 var pgConnectionStatusList = [
@@ -65,16 +68,20 @@ exports.whenReady = function(fn) {
 
 exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
     var streamsToUpdate = activeStreams;
-    var targetId, stream, path;
+    var targetId, stream, pathDetails, fd;
 
     activeStreams = {};
 
     for (targetId in streamsToUpdate) {
         stream = streamsToUpdate[targetId];
-        path = simplify(_.chain(stream).map(locationToLatLng).compact().value());
-        // @TODO persist path as SVG, also persist start/end location in psql
+        fd = streamsToUpdate[targetId].fileDescriptor;
+        pathDetails = locationStreamToBezier(stream);
+        //console.log(pathDetails);
+
+        createActiveStream(targetId);
+        // @TODO persist path & locaitons
     }
-    stream = targetId = locationShard = null;
+    stream = targetId = null;
 };
 var throttledComputeActiveStreamSvg = _.throttle(exports.computeActiveStreamSvg, Math.pow(2, 14));
 
@@ -136,6 +143,84 @@ function connectPsql() {
     });
 };
 
+function createActiveStream(targetId) {
+    var stream = fs.createWriteStream(getTargetActiveFilename(targetId));
+    stream.on('close', handleWriteStreamClose);
+    stream.on('drain', handleWriteStreamDrain);
+    stream.on('error', handleWriteStreamError);
+    stream.on('finish', handleWriteStreamFinish);
+    stream.on('pipe', handleWriteStreamPipe);
+    stream.on('unpipe', handleWriteStreamUnpipe);
+};
+
+function getTargetActiveFilename(targetId, path) {
+    if (!path) {
+        path = getTargetPath(targetId);
+    }
+
+    return path + '/' + activeStreamFilename;
+};
+
+var activeStreamFilename = '_active.svg';
+function getTargetPath(targetId) {
+    return exports.svgDir + '/' + targetId;
+};
+
+var activeStreams = {};
+function getTargetWriteStream(targetId, cb) {
+    var path = getTargetPath(targetId);
+    var file = getTargetActiveFilename(targetId, path);
+
+    if (activeStreams[targetId] instanceof Array) {
+        cb(null);
+        return;
+    }
+
+    fs.access(path, fs.F_OK, function(err) {
+        if (err) {
+            LocationMgrLogger('svg', 'mkdir');
+            fs.mkdir(path, function(err) {
+                if (err) {
+                    cb(err);
+                } else {
+                    getFile();
+                }
+            });
+        } else {
+            getFile();
+        }
+    });
+
+    function getFile() {
+        fs.open(file, 'w', function(err, fd) {
+            if (err) {
+                cb(err);
+                return;
+            }
+
+            fs.fstat(fd, function(err, stats) {
+                if (err) {
+                    cb(err);
+                    return;
+                }
+
+                activeStreams[targetId] = [];
+                activeStreams[targetId].fileDescriptor = fd;
+                activeStreams[targetId].fileSize = stats.size;
+
+                cb(null);
+            });
+        });
+    }
+};
+
+function getSqDist(p1, p2) {
+    var dx = p1[0] - p2[0],
+    dy = p1[1] - p2[1];
+
+    return dx * dx + dy * dy;
+}
+
 function handleValue(value, cb) {
     var jsonValue;
     try {
@@ -146,46 +231,111 @@ function handleValue(value, cb) {
     }
 
     if (typeof jsonValue.targetId === 'string') {
-        mkSvgDir(jsonValue.targetId, function(err) {
+        getTargetWriteStream(jsonValue.targetId, function(err) {
             if (err) {
                 LocationMgrLogger('value', 'err');
                 cb(err);
             } else {
                 activeStreams[jsonValue.targetId].push(jsonValue.location);
                 throttledComputeActiveStreamSvg();
-                LocationMgrLogger('value', 'pushed');
                 cb(null);
             }
         });
     } else {
         LocationMgrLogger('value', 'err');
+        cb('target id not found');
     }
 };
 
-var activeStreams = {};
-function mkSvgDir(targetId, cb) {
-    if (activeStreams[targetId] instanceof Array) {
-        cb(null);
-        return;
+function handleWriteStreamClose(event) {
+    LocationMgrLogger('write', 'close');
+};
+
+function handleWriteStreamDrain(event) {
+    LocationMgrLogger('write', 'drain');
+};
+
+function handleWriteStreamError(event) {
+    LocationMgrLogger('write', 'err');
+};
+
+function handleWriteStreamFinish(event) {
+    LocationMgrLogger('write', 'finish');
+};
+
+function handleWriteStreamPipe(src) {
+    LocationMgrLogger('write', 'pipe');
+};
+
+function handleWriteStreamUnpipe(src) {
+    LocationMgrLogger('write', 'unpipe');
+};
+
+var sqLineToleranceDegrees = Math.pow(0.001, 2); // ~110.57^2 meters
+function locationStreamToBezier(points) {
+    if (points.length < 2) {
+        return points;
     }
 
-    fs.access(exports.svgDir + '/' + targetId, fs.F_OK, function(err) {
-        if (err) {
-            LocationMgrLogger('svg', 'mkdir');
-            fs.mkdir(exports.svgDir + '/' + targetId, function(err) {
-                if (err) {
-                    cb(err);
-                } else {
-                    activeStreams[targetId] = [];
-                    cb(null);
-                }
-            });
+    var i, isLastPoint, point = null, skippedPoints = null, sqDistance = null;
+    var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
+
+    var prevPoint = points[0].coordinates;
+    var anchors = [prevPoint];
+    var path = d3.path();
+    path._x0 = prevPoint[0];
+    path._y0 = prevPoint[1];
+
+    for (i = 1; i < points.length; i++) {
+        point = points[i].coordinates;
+        isLastPoint = i === points.length - 1;
+
+        if (!isLastPoint) {
+            sqDistance = getSqDist(point, prevPoint);
         } else {
-            activeStreams[targetId] = [];
-            cb(null);
+            sqDistance = null;
         }
-    });
-};
+
+        if (skippedPoints === null && (isLastPoint || sqDistance > sqLineToleranceDegrees)) {
+            // Draw new point, straight line
+            anchors.push(point);
+            prevPoint = point;
+            path.moveTo(point[0], point[1]);
+        } else if (isLastPoint || sqDistance > sqLineToleranceDegrees) {
+            // Draw new point, average skipped points as bezier
+            if (skippedPoints.length === 1) {
+                path.quadraticCurveTo(skippedPoints[0][0], skippedPoints[0][1], point[0], point[1]);
+            } else {
+                if (spliceBiasCeil) {
+                    spliceIdx = Math.ceil(skippedPoints.length / 2);
+                    spliceBiasCeil = false;
+                } else {
+                    spliceIdx = Math.floor(skippedPoints.length / 2);
+                    spliceBiasCeil = true;
+                }
+
+                handles[0] = geolib.getCenter(skippedPoints.slice(0, spliceIdx));
+                handles[1] = geolib.getCenter(skippedPoints.slice(spliceIdx, skippedPoints.length));
+                path.moveTo(point[0], point[1]);
+                path.bezierCurveTo(handles[0].longitude, handles[0].latitude, handles[1].longitude, handles[1].latitude, point[0], point[1]);
+            }
+
+            anchors.push(point);
+            skippedPoints = spliceIdx = handles[0] = handles[1] = null;
+        } else if (skippedPoints === null) {
+            // Too close; we have skipped one point.
+            skippedPoints = [point];
+        } else {
+            // Too close; we have skipped many points.
+            skippedPoints.push(point);
+        }
+    }
+
+    return {
+        path: path.toString(),
+        anchors: anchors
+    };
+}
 
 function locationToLatLng(location) {
     if (!(location && location.coordinates && location.coordinates.length > 1)) {
