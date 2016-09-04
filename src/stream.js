@@ -18,9 +18,9 @@ exports.Stream = function Stream() {
     }
     streamPrefix += streamIdx.toString();
 
-    this.stream = new Bacon.Bus();
+    this.bus = new Bacon.Bus();
     this.prefix = streamPrefix;
-    exports.streams[streamPrefix] = this.stream;
+    exports.streams[streamPrefix] = this.bus;
 
     StreamLogger('create', streamPrefix);
     return this;
@@ -29,20 +29,26 @@ exports.Stream = function Stream() {
 exports.Stream.prototype = {
     end: function() {
         delete exports.streams[this.prefix];
-        this.stream.end.apply(this.stream, arguments);
+        this.bus.end.apply(this.bus, arguments);
         StreamLogger('bus', 'end');
     },
     error: function() {
-        this.stream.error.apply(this.stream, arguments);
+        this.bus.error.apply(this.bus, arguments);
         StreamLogger('bus', 'error');
     },
     plug: function() {
-        this.stream.plug.apply(this.stream, arguments);
+        // @TODO not really suported, gotta think about this
+        return null;
+        this.bus.plug.apply(this.bus, arguments);
         StreamLogger('bus', 'plug');
     },
     push: function() {
-        this.stream.push.apply(this.stream, arguments);
+        this.bus.push.apply(this.bus, arguments);
         StreamLogger('bus', 'push');
     },
+};
+
+exports.compose = function composeMessage(prefix, obj) {
+    return prefix + JSON.stringify(obj);
 };
 

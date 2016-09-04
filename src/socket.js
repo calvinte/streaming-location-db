@@ -1,15 +1,16 @@
 var WebSocket = require('ws');
 var StreamMgr = require('./stream');
 var SocketLogger = require('./logger').Logger('socket');
+var locationStream = require('./locationMgr');
 
-var port = 3002;
+var maxMessageLength = Math.pow(2, 14);
 var server = null;
 var sockets = [];
 
+exports.port = 3002;
 exports.checkStatus = function checkStatus(cb) {
     var stream = new StreamMgr.Stream();
-
-    var client = new WebSocket('ws://localhost:' + port);
+    var client = new WebSocket('ws://localhost:' + exports.port);
     client.on('open', function() {
         client.send(stream.prefix + 'STATUSCHECK', function(err) {
             if (err) {
@@ -34,7 +35,7 @@ exports.startServer = function startServer(cb) {
     }
 
     server = new WebSocket.Server({
-        port: port,
+        port: exports.port,
     }, cb);
 
     server.on('connection', handleServerConnection);
@@ -81,8 +82,13 @@ function handleClientException(exception) {
 function handleClientMessage(message) {
     var stream, streamPrefix = message.substr(0, StreamMgr.streamPrefixLength);
 
-    if (stream = StreamMgr.streams[streamPrefix]) {
-        stream.push(message);
+    if (message.length > maxMessageLength) {
+        handleClientException(null);
+        return;
+    }
+
+    if (streamPrefix && (stream = StreamMgr.streams[streamPrefix])) {
+        stream.push(message.substr(StreamMgr.streamPrefixLength, maxMessageLength));
         SocketLogger('client', 'message');
     } else {
         handleClientException(message);

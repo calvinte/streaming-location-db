@@ -4,9 +4,11 @@
   "description": "Converts sessions of streaming locations to SVG",
   "private": true,
   "dependencies": {
+    "async": "2.0.1",
     "baconjs": "0.7.85",
     "d3-node": "0.2.0",
     "pg": "4.4.0",
+    "pg-format": "1.0.2",
     "pg-native": "1.8.1",
     "ws": "1.1.1"
   },
