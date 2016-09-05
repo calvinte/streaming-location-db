@@ -156,7 +156,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
             }
 
             exports.pg.query(format(`
-                INSERT INTO pathref(${_.keys(exports.pathref.prototype).join(',')}) VALUES %L RETURNING _id
+                INSERT INTO pathref(${_.keys(exports.pathref.prototype).join(',')}) VALUES %L
             `, _.flatten(_.map(targetPathAnchors, function(anchors, targetId) {
                 return _.map(anchors, function(anchor) {
                     return [
