@@ -435,7 +435,7 @@ function locationsToVectorPosition() {
 
 var minSegmentDegrees = 0.0001 // ~11.06 meters
 var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
-var thresholdRad = 50 / 180 * Math.PI;
+var thresholdRad = 45 / 180 * Math.PI;
 var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;

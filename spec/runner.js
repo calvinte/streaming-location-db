@@ -81,7 +81,7 @@ describe('Streaming Locations -> SVG', function() {
 
                     setTimeout(function() {
                         done();
-                    }, 4);
+                    }, 40);
                 });
             });
         });
