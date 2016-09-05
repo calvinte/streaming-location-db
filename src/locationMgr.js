@@ -1,8 +1,9 @@
 "use strict"
 
 var async = require('async');
-var fs = require('fs');
 var d3 = require('d3');
+var fs = require('fs');
+var format = require('pg-format');
 var geolib = require('geolib');
 var pg = require('pg').native;
 var _ = require('underscore');
@@ -25,6 +26,7 @@ var fsSetupStatusList = [
 ];
 
 // CREATE DATABASE streaming_location_svg;
+// \c streaming_location_svg;
 // CREATE EXTENSION Postgis;
 // CREATE EXTENSION "uuid-ossp";
 exports.pg = null;
@@ -67,11 +69,19 @@ exports.whenReady = function(fn) {
 };
 
 var svgCloseStr = '</svg>';
+var activeStreamComputationInProgress = false;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
+    if (activeStreamComputationInProgress) {
+        throttledComputeActiveStreamSvg();
+        return;
+    }
+
     var streamsToUpdate = activeStreams;
     var targetId, stream, pathDetails;
     var width, height;
+    var query;
 
+    activeStreamComputationInProgress = true;
     activeStreams = {};
 
     for (targetId in streamsToUpdate) {
@@ -79,7 +89,6 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         pathDetails = locationStreamToBezier(stream);
         width = pathDetails.bounds[2] - pathDetails.bounds[0];
         height = pathDetails.bounds[3] - pathDetails.bounds[1];
-        //fileSize.fd, fileSize.fileSize, stream.writeStream
         if (stream.fileSize === 0) {
             stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">');
         }
@@ -91,7 +100,30 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         stream.writeStream.write(pathDetails.path);
         stream.writeStream.end(svgCloseStr);
 
-        // @TODO persist path & locaitons
+        if (!exports.pg || exports.pgStatus !== pgConnectionStatusList[3]) {
+            LocationMgrLogger('psql', 'err');
+            return;
+        }
+
+        exports.pg.query(format(`
+            INSERT INTO locations(${_.keys(exports.location.prototype).join(',')}) VALUES %L
+        `, _.map(pathDetails.anchors, function(location) {
+            var coordString = location.coordinates.join(' ');
+            if (location.coordinates.length === 2) {
+                coordString += ' -999';
+            }
+
+            location.coordinates = `POINTZ(${coordString})`;
+            return _.toArray(location);
+        })), function(err, res) {
+            if (err) {
+                LocationMgrLogger('psql', 'err');
+            } else {
+                LocationMgrLogger('psql', 'success' + ':' + res.rowCount);
+                // @TODO create table to associate file name with location ids
+            }
+            activeStreamComputationInProgress = false;
+        });
     }
     stream = targetId = null;
 };
@@ -128,7 +160,7 @@ function connectPsql() {
                     CREATE TABLE locations(
                         _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
                         time TIMESTAMPTZ NOT NULL,
-                        location GEOGRAPHY(POINTZ, 4326) NOT NULL,
+                        coordinates GEOGRAPHY(POINTZ, 4326) NOT NULL,
                         heading REAL,
                         speed REAL,
                         accuracy REAL
@@ -314,7 +346,7 @@ function locationStreamToBezier(points) {
 
     var prevAnchor = points[0].coordinates;
     var prevPoint = prevAnchor;
-    var anchors = [prevAnchor];
+    var anchors = [points[0]];
     var path = d3.path();
     var origPath = null;
 
@@ -357,13 +389,13 @@ function locationStreamToBezier(points) {
 
         if (skippedPoints === null && anchorRequired) {
             // Draw new point, straight line
-            anchors.push(point);
+            anchors.push(points[i]);
             prevAnchor = point;
 
             path.lineTo.apply(path, locationsToVectorPosition(point));
         } else if (anchorRequired) {
             // Draw new point, average skipped points as bezier
-            anchors.push(point);
+            anchors.push(points[i]);
             prevAnchor = point;
 
             if (skippedPoints.length === 1) {
