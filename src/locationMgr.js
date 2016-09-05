@@ -298,15 +298,17 @@ function locationsToVectorPosition() {
     return locations;
 }
 
-var minSegmentDegrees = 0.001; // ~110.57 meters
+var minSegmentDegrees = 0.0001 // ~11.06 meters
 var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
+var thresholdRad = 50 / 180 * Math.PI;
 function locationStreamToBezier(points) {
-    var i, anchorRequired, point = null, skippedPoints = null, sqAnchorDistance = null;
+    var i, point = null, skippedPoints = null;
+    var anchorRequired, sqAnchorDistance = null, anchorTangent = null, pointTangent;
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
     var prevAnchor = points[0].coordinates;
-    //var prevPoint = prevAnchor;
+    var prevPoint = prevAnchor;
     var anchors = [prevAnchor];
     var path = d3.path();
     var vectorPositions = null;
@@ -317,12 +319,19 @@ function locationStreamToBezier(points) {
     for (i = 1; i < points.length; i++) {
         point = points[i].coordinates;
 
-        anchorRequired = i === points.length - 1;
-        if (anchorRequired) {
-            sqAnchorDistance = null;
-        } else {
+        anchorRequired = i === points.length - 1; // Last point?
+
+        if (!anchorRequired) {
             sqAnchorDistance = getSqDist(point, prevAnchor);
-            anchorRequired = sqAnchorDistance > sqMinSegmentDegrees;
+            if (sqAnchorDistance > sqMinSegmentDegrees) {
+                // Distance exceeds minimum.
+                anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
+                pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
+                if (Math.abs(anchorTangent - pointTangent) > thresholdRad) {
+                    // Delta angle exceeds minimum, draw an anchor.
+                    anchorRequired = true;
+                }
+            }
         }
 
         minX = Math.min(point[0], minX);
@@ -357,7 +366,6 @@ function locationStreamToBezier(points) {
                 path.bezierCurveTo.apply(path, locationsToVectorPosition(handles[0], handles[1], point));
             }
 
-            anchors.push(point);
             skippedPoints = spliceIdx = handles[0] = handles[1] = null;
         } else if (skippedPoints === null) {
             // Too close; we have skipped one point.
@@ -367,7 +375,8 @@ function locationStreamToBezier(points) {
             skippedPoints.push(point);
         }
 
-        //prevPoint = point;
+        prevPoint = point;
+        point = anchorRequired = sqAnchorDistance = anchorTangent = pointTangent = spliceIdx = spliceBiasCeil = null;
     }
 
     var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
