@@ -1,5 +1,5 @@
-Stream Location DB
-==================
+Streaming Location DB
+=====================
 
 Application accepts WebSocket connections, transforms streaming data to an
 optimized bezier curve, stored as SVG (see directory `.svg_db`). Geolocation
