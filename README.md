@@ -5,6 +5,8 @@ Application accepts WebSocket connections, transforms streaming data to an
 optimized bezier curve, stored as SVG (see directory `.svg_db`). Geolocation
 data for non-redundent coordinates (SVG anchors) are persisted in Postgres.
 
+![Sample output](/sample.png?raw=true "Sample output")
+
 Postgres
 --------
 ```
