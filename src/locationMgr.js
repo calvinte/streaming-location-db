@@ -66,19 +66,27 @@ exports.whenReady = function(fn) {
     }
 };
 
+var svgCloseStr = '</svg>';
 exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
     var streamsToUpdate = activeStreams;
-    var targetId, stream, pathDetails, fd;
+    var targetId, stream, pathDetails;
+    var width, height;
 
     activeStreams = {};
 
     for (targetId in streamsToUpdate) {
         stream = streamsToUpdate[targetId];
-        fd = streamsToUpdate[targetId].fileDescriptor;
         pathDetails = locationStreamToBezier(stream);
-        //console.log(pathDetails);
+        width = pathDetails.bounds[2] - pathDetails.bounds[0];
+        height = pathDetails.bounds[3] - pathDetails.bounds[1];
+        //fileSize.fd, fileSize.fileSize, stream.writeStream
+        if (stream.fileSize === 0) {
+            stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg">');
+        }
 
-        createActiveStream(targetId);
+        stream.writeStream.write(pathDetails.path);
+        stream.writeStream.end(svgCloseStr);
+
         // @TODO persist path & locaitons
     }
     stream = targetId = null;
@@ -143,14 +151,15 @@ function connectPsql() {
     });
 };
 
-function createActiveStream(targetId) {
-    var stream = fs.createWriteStream(getTargetActiveFilename(targetId));
-    stream.on('close', handleWriteStreamClose);
-    stream.on('drain', handleWriteStreamDrain);
-    stream.on('error', handleWriteStreamError);
-    stream.on('finish', handleWriteStreamFinish);
-    stream.on('pipe', handleWriteStreamPipe);
-    stream.on('unpipe', handleWriteStreamUnpipe);
+function createActiveStream(file, fd, fileSize) {
+    var writer = fs.createWriteStream(file, {fd: fd, start: Math.max(0, fileSize - svgCloseStr.length)});
+    writer.on('close', handleWriteStreamClose);
+    writer.on('drain', handleWriteStreamDrain);
+    writer.on('error', handleWriteStreamError);
+    writer.on('finish', handleWriteStreamFinish);
+    writer.on('pipe', handleWriteStreamPipe);
+    writer.on('unpipe', handleWriteStreamUnpipe);
+    return writer;
 };
 
 function getTargetActiveFilename(targetId, path) {
@@ -207,6 +216,7 @@ function getTargetWriteStream(targetId, cb) {
                 activeStreams[targetId] = [];
                 activeStreams[targetId].fileDescriptor = fd;
                 activeStreams[targetId].fileSize = stats.size;
+                activeStreams[targetId].writeStream = createActiveStream(file, fd, stats.size);
 
                 cb(null);
             });
@@ -219,7 +229,7 @@ function getSqDist(p1, p2) {
     dy = p1[1] - p2[1];
 
     return dx * dx + dy * dy;
-}
+};
 
 function handleValue(value, cb) {
     var jsonValue;
@@ -271,21 +281,38 @@ function handleWriteStreamUnpipe(src) {
     LocationMgrLogger('write', 'unpipe');
 };
 
-var sqLineToleranceDegrees = Math.pow(0.001, 2); // ~110.57^2 meters
-function locationStreamToBezier(points) {
-    if (points.length < 2) {
-        return points;
+var svgDecimalPrecision = 3;
+function locationsToVectorPosition() {
+    var _args = arguments;
+    var i, j, locations = Array(arguments.length * 2);
+    for (i = j = 0; i < arguments.length; i++) {
+        if (arguments[i].longitude && arguments[i].latitude) {
+            locations[j++] = parseFloat(arguments[i].longitude).toFixed(svgDecimalPrecision);
+            locations[j++] = parseFloat(arguments[i].latitude).toFixed(svgDecimalPrecision);
+        } else {
+            locations[j++] = (arguments[i][0]).toFixed(svgDecimalPrecision);
+            locations[j++] = (arguments[i][1]).toFixed(svgDecimalPrecision);
+        }
     }
 
+    return locations;
+}
+
+var lineToleranceDegrees = 0.001; // ~110.57 meters
+var sqLineToleranceDegrees = Math.pow(lineToleranceDegrees, 2);
+function locationStreamToBezier(points) {
     var i, isLastPoint, point = null, skippedPoints = null, sqDistance = null;
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
+    var minX, maxX, minY, maxY;
 
     var prevPoint = points[0].coordinates;
     var anchors = [prevPoint];
     var path = d3.path();
-    path._x0 = prevPoint[0];
-    path._y0 = prevPoint[1];
+    var vectorPositions = null;
+    path.moveTo.apply(path, locationsToVectorPosition(prevPoint));
 
+    minX = maxX = prevPoint[0];
+    minY = maxY = prevPoint[1];
     for (i = 1; i < points.length; i++) {
         point = points[i].coordinates;
         isLastPoint = i === points.length - 1;
@@ -296,15 +323,20 @@ function locationStreamToBezier(points) {
             sqDistance = null;
         }
 
+        minX = Math.min(point[0], minX);
+        maxX = Math.max(point[0], maxX);
+        minY = Math.min(point[1], minY);
+        maxY = Math.max(point[1], maxY);
+
         if (skippedPoints === null && (isLastPoint || sqDistance > sqLineToleranceDegrees)) {
             // Draw new point, straight line
             anchors.push(point);
             prevPoint = point;
-            path.moveTo(point[0], point[1]);
+            path.lineTo.apply(path, locationsToVectorPosition(point));
         } else if (isLastPoint || sqDistance > sqLineToleranceDegrees) {
             // Draw new point, average skipped points as bezier
             if (skippedPoints.length === 1) {
-                path.quadraticCurveTo(skippedPoints[0][0], skippedPoints[0][1], point[0], point[1]);
+                path.quadraticCurveTo.apply(path, locationsToVectorPosition(skippedPoints[0], point));
             } else {
                 if (spliceBiasCeil) {
                     spliceIdx = Math.ceil(skippedPoints.length / 2);
@@ -316,8 +348,7 @@ function locationStreamToBezier(points) {
 
                 handles[0] = geolib.getCenter(skippedPoints.slice(0, spliceIdx));
                 handles[1] = geolib.getCenter(skippedPoints.slice(spliceIdx, skippedPoints.length));
-                path.moveTo(point[0], point[1]);
-                path.bezierCurveTo(handles[0].longitude, handles[0].latitude, handles[1].longitude, handles[1].latitude, point[0], point[1]);
+                path.bezierCurveTo.apply(path, locationsToVectorPosition(handles[0], handles[1], point));
             }
 
             anchors.push(point);
@@ -331,9 +362,15 @@ function locationStreamToBezier(points) {
         }
     }
 
+    var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
+    bounds[0] = Math.floor(bounds[0]);
+    bounds[1] = Math.floor(bounds[1]);
+    bounds[2] = Math.ceil(bounds[2]);
+    bounds[3] = Math.ceil(bounds[3]);
     return {
-        path: path.toString(),
-        anchors: anchors
+        anchors: anchors,
+        bounds: bounds,
+        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + lineToleranceDegrees + '" />'
     };
 }
 

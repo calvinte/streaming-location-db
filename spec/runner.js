@@ -44,6 +44,7 @@ describe('Streaming Locations -> SVG', function() {
 
     describe('Stream Locations', function() {
         it('should stream lat/lng pairs to the WebSocket Server', function(done) {
+            this.timeout(4000);
             var client = new WebSocket('ws://localhost:' + Socket.port);
             client.on('open', function() {
                 async.parallel(_.map(specLocations, function(locations, targetId) {
