@@ -298,29 +298,31 @@ function locationsToVectorPosition() {
     return locations;
 }
 
-var lineToleranceDegrees = 0.001; // ~110.57 meters
-var sqLineToleranceDegrees = Math.pow(lineToleranceDegrees, 2);
+var minSegmentDegrees = 0.001; // ~110.57 meters
+var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
 function locationStreamToBezier(points) {
-    var i, isLastPoint, point = null, skippedPoints = null, sqDistance = null;
+    var i, anchorRequired, point = null, skippedPoints = null, sqAnchorDistance = null;
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
-    var prevPoint = points[0].coordinates;
-    var anchors = [prevPoint];
+    var prevAnchor = points[0].coordinates;
+    //var prevPoint = prevAnchor;
+    var anchors = [prevAnchor];
     var path = d3.path();
     var vectorPositions = null;
-    path.moveTo.apply(path, locationsToVectorPosition(prevPoint));
+    path.moveTo.apply(path, locationsToVectorPosition(prevAnchor));
 
-    minX = maxX = prevPoint[0];
-    minY = maxY = prevPoint[1];
+    minX = maxX = prevAnchor[0];
+    minY = maxY = prevAnchor[1];
     for (i = 1; i < points.length; i++) {
         point = points[i].coordinates;
-        isLastPoint = i === points.length - 1;
 
-        if (!isLastPoint) {
-            sqDistance = getSqDist(point, prevPoint);
+        anchorRequired = i === points.length - 1;
+        if (anchorRequired) {
+            sqAnchorDistance = null;
         } else {
-            sqDistance = null;
+            sqAnchorDistance = getSqDist(point, prevAnchor);
+            anchorRequired = sqAnchorDistance > sqMinSegmentDegrees;
         }
 
         minX = Math.min(point[0], minX);
@@ -328,13 +330,17 @@ function locationStreamToBezier(points) {
         minY = Math.min(point[1], minY);
         maxY = Math.max(point[1], maxY);
 
-        if (skippedPoints === null && (isLastPoint || sqDistance > sqLineToleranceDegrees)) {
+        if (skippedPoints === null && anchorRequired) {
             // Draw new point, straight line
             anchors.push(point);
-            prevPoint = point;
+            prevAnchor = point;
+
             path.lineTo.apply(path, locationsToVectorPosition(point));
-        } else if (isLastPoint || sqDistance > sqLineToleranceDegrees) {
+        } else if (anchorRequired) {
             // Draw new point, average skipped points as bezier
+            anchors.push(point);
+            prevAnchor = point;
+
             if (skippedPoints.length === 1) {
                 path.quadraticCurveTo.apply(path, locationsToVectorPosition(skippedPoints[0], point));
             } else {
@@ -360,13 +366,15 @@ function locationStreamToBezier(points) {
             // Too close; we have skipped many points.
             skippedPoints.push(point);
         }
+
+        //prevPoint = point;
     }
 
     var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
     return {
         anchors: anchors,
         bounds: bounds,
-        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + lineToleranceDegrees + '" />'
+        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + minSegmentDegrees + '" />'
     };
 }
 
