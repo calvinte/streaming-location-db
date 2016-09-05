@@ -41,26 +41,12 @@ exports.queue.pause();
 exports.stream = new StreamMgr.Stream();
 // @TODO exports.stream.offClientClose
 exports.stream.onClientClose(function(clientSocketIndex) {
-    var targetId, activeStream, path, filename;
+    var targetId;
     for (targetId in clientTargetMap[clientSocketIndex]) {
-        path = getTargetPath(targetId);
-        filename = path + '/' + targetLastSeen[targetId].getTime() + '.svg';
-
         if (activeStreams[targetId] && activeStreams[targetId].writeStream) {
-            activeStreams[targetId].writeStream.end(function(err) {
-                rename();
-            });
-            activeStreams[targetId] = null;
-        } else {
-            rename();
+            activeStreams[targetId].writeStream.end();
         }
-
         activeStreams[targetId] = null;
-    }
-    function rename() {
-        fs.rename(getTargetActiveFilename(targetId, path), filename, function() {
-            LocationMgrLogger('fs', 'archive complete');
-        });
     }
 });
 exports.stream.bus.onValue(function(message) {
@@ -100,6 +86,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         return;
     }
 
+    var targetPathAnchors = {};
     var targetId, stream, pathDetails;
     var width, height;
     var query;
@@ -116,6 +103,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         pathDetails = locationStreamToBezier(stream);
         width = pathDetails.bounds[2] - pathDetails.bounds[0];
         height = pathDetails.bounds[3] - pathDetails.bounds[1];
+        targetPathAnchors[targetId] = pathDetails.anchors;
         if (stream.fileSize === 0) {
             stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">');
         }
@@ -125,30 +113,33 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         }
 
         stream.writeStream.write(pathDetails.path);
-        stream.writeStream.end(svgCloseStr);
+        stream.writeStream.write(svgCloseStr);
 
         if (!exports.pg || exports.pgStatus !== pgConnectionStatusList[3]) {
             LocationMgrLogger('psql', 'err');
             return;
         }
 
-        activeStreams[targetId] = [];
+        activeStreams[targetId].splice(0, stream.length);
     }
 
     exports.pg.query(format(`
-        INSERT INTO locations(${_.keys(exports.location.prototype).join(',')}) VALUES %L
-    `, _.map(pathDetails.anchors, function(location) {
-        var coordString = location.coordinates.join(' ');
-        if (location.coordinates.length === 2) {
-            coordString += ' -999';
-        }
+        INSERT INTO locations(${_.keys(exports.location.prototype).join(',')}) VALUES %L RETURNING _id
+    `, _.flatten(_.map(targetPathAnchors, function(anchors) {
+        return _.map(anchors, function(location) {
+            var coordString = location.coordinates.join(' ');
+            if (location.coordinates.length === 2) {
+                coordString += ' -999';
+            }
 
-        location.coordinates = `POINTZ(${coordString})`;
-        return _.toArray(location);
-    })), function(err, res) {
+            location.coordinates = `POINTZ(${coordString})`;
+            return _.toArray(location);
+        });
+    }), true)), function(err, res) {
         if (err) {
             LocationMgrLogger('psql', 'err');
         } else {
+            //console.log(res);
             LocationMgrLogger('psql', 'success' + ':' + res.rowCount);
             // @TODO create table to associate file name with location ids
         }
@@ -335,7 +326,13 @@ function handleWriteStreamError(event) {
 };
 
 function handleWriteStreamFinish(event) {
-    //LocationMgrLogger('write', 'finish');
+    var activePath = this.path;
+    var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec('./.svg_db/UFFSDjgs*eSAhI*lwRNP~RKu/_active.svg')[1];
+    var filename = activePath.replace('/_active.svg', '/' + targetLastSeen[targetId].getTime() + '.svg');
+
+    fs.rename(activePath, filename, function(err) {
+        LocationMgrLogger('fs', 'archive complete');
+    });
 };
 
 function handleWriteStreamPipe(src) {
