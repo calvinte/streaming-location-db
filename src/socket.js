@@ -1,3 +1,5 @@
+"use strict"
+
 var WebSocket = require('ws');
 
 var Message = require('./message');

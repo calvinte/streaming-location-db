@@ -1,3 +1,5 @@
+"use strict"
+
 var Socket = require('./socket');
 var Bacon = require('baconjs');
 var WebSocket = require('ws');

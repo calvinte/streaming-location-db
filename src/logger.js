@@ -1,3 +1,5 @@
+"use strict"
+
 var loggingEnabled = true;
 exports.Logger = function Logger(id) {
     var prefix = id + ':';

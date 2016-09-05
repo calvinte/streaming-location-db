@@ -1,3 +1,5 @@
+"use strict"
+
 var StreamMgr = require('./stream');
 var SocketMgr = require('./socket');
 module.exports = function(message, streamPrefix, clientSocketIndex) {
