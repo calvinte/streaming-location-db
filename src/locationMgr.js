@@ -84,6 +84,10 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
             stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">');
         }
 
+        if (pathDetails.origPath) {
+            stream.writeStream.write(pathDetails.origPath);
+        }
+
         stream.writeStream.write(pathDetails.path);
         stream.writeStream.end(svgCloseStr);
 
@@ -301,6 +305,7 @@ function locationsToVectorPosition() {
 var minSegmentDegrees = 0.0001 // ~11.06 meters
 var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
 var thresholdRad = 50 / 180 * Math.PI;
+var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;
     var anchorRequired, sqAnchorDistance = null, anchorTangent = null, pointTangent;
@@ -311,8 +316,15 @@ function locationStreamToBezier(points) {
     var prevPoint = prevAnchor;
     var anchors = [prevAnchor];
     var path = d3.path();
-    var vectorPositions = null;
+    var origPath = null;
+
     path.moveTo.apply(path, locationsToVectorPosition(prevAnchor));
+
+    if (drawOriginalPath) {
+        origPath = d3.path();
+        origPath.moveTo.apply(origPath, locationsToVectorPosition(prevAnchor));
+    }
+
 
     minX = maxX = prevAnchor[0];
     minY = maxY = prevAnchor[1];
@@ -338,6 +350,10 @@ function locationStreamToBezier(points) {
         maxX = Math.max(point[0], maxX);
         minY = Math.min(point[1], minY);
         maxY = Math.max(point[1], maxY);
+
+        if (drawOriginalPath) {
+            origPath.lineTo.apply(origPath, locationsToVectorPosition(point));
+        }
 
         if (skippedPoints === null && anchorRequired) {
             // Draw new point, straight line
@@ -383,6 +399,7 @@ function locationStreamToBezier(points) {
     return {
         anchors: anchors,
         bounds: bounds,
+        origPath: drawOriginalPath ? '<path d="' + origPath.toString() + '" fill="none" stroke="red" stroke-width="' + minSegmentDegrees + '" />' : null,
         path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + minSegmentDegrees + '" />'
     };
 }
