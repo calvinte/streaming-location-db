@@ -85,8 +85,14 @@ describe('Streaming Locations -> SVG', function() {
     });
 
     describe('Compute stream svg', function() {
-        it('should create svgs for active streams', function() {
-            LocationMgr.computeActiveStreamSvg();
+        it('should create svgs for active streams', function(done) {
+            LocationMgr.computeActiveStreamSvg(function(err) {
+                assert.equal(null, err);
+
+                setTimeout(function() {
+                    done();
+                }, 4);
+            });
         });
     });
 

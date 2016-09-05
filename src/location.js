@@ -49,6 +49,7 @@ exports.stream.onClientClose(function(clientSocketIndex) {
         activeStreams[targetId] = null;
     }
 });
+
 exports.stream.bus.onValue(function(message) {
     exports.queue.push(message);
 });
@@ -69,6 +70,18 @@ exports.location.prototype = {
     'time': null,
 };
 
+exports.pathref = function(options) {
+    this.file = options.file || exports.pathref.prototype.file;
+    this.location = options.location || exports.pathref.prototype.location;
+    this.target = options.target || exports.pathref.prototype.target;
+};
+
+exports.pathref.prototype = {
+    'filename': null,
+    'location': null,
+    'target': null,
+};
+
 var readyListeners = [];
 exports.whenReady = function(fn) {
     if (exports.pgStatus === pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
@@ -79,19 +92,12 @@ exports.whenReady = function(fn) {
 };
 
 var svgCloseStr = '</svg>';
-var activeStreamComputationInProgress = false;
-exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
-    if (activeStreamComputationInProgress) {
-        throttledComputeActiveStreamSvg();
-        return;
-    }
-
+var activeStreamTargetPersistedLocationIdMap = {};
+var computeActiveStreamSvgCount = -1;
+exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     var targetPathAnchors = {};
-    var targetId, stream, pathDetails;
-    var width, height;
-    var query;
-
-    activeStreamComputationInProgress = true;
+    var targetId, stream, pathDetails, width, height;
+    var row, i, j, query;
 
     for (targetId in activeStreams) {
         stream = activeStreams[targetId];
@@ -121,11 +127,43 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         }
 
         activeStreams[targetId].splice(0, stream.length);
+
+        targetId = stream = pathDetails = width = height = null;
     }
 
     exports.pg.query(format(`
         INSERT INTO locations(${_.keys(exports.location.prototype).join(',')}) VALUES %L RETURNING _id
-    `, _.flatten(_.map(targetPathAnchors, function(anchors) {
+    `, _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true)), function(err, res) {
+        if (err) {
+            LocationMgrLogger('psql', 'err');
+        } else {
+            LocationMgrLogger('psql', 'success' + ':' + res.rowCount);
+
+            j = -1;
+            for (targetId in targetPathAnchors) {
+                for (i in targetPathAnchors[targetId]) {
+                    row = res.rows[++j];
+                    targetPathAnchors[targetId][i]._id = row['_id']
+                }
+            }
+
+            exports.pg.query(format(`
+                INSERT INTO pathref(${_.keys(exports.pathref.prototype).join(',')}) VALUES %L RETURNING _id
+            `, _.flatten(_.map(targetPathAnchors, function(anchors, targetId) {
+                return _.map(anchors, function(anchor) {
+                    return [
+                        activeStreamFilename,
+                        anchor._id,
+                        targetId
+                    ];
+                });
+            }), true)), function(err, res) {
+                cb(err);
+            });
+        }
+    });
+
+    function anchorsToInsertArr(anchors) {
         return _.map(anchors, function(location) {
             var coordString = location.coordinates.join(' ');
             if (location.coordinates.length === 2) {
@@ -135,19 +173,20 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
             location.coordinates = `POINTZ(${coordString})`;
             return _.toArray(location);
         });
-    }), true)), function(err, res) {
-        if (err) {
-            LocationMgrLogger('psql', 'err');
-        } else {
-            //console.log(res);
-            LocationMgrLogger('psql', 'success' + ':' + res.rowCount);
-            // @TODO create table to associate file name with location ids
-        }
+    }
+};
+var activeStreamComputationInProgress = false;
+var throttledComputeActiveStreamSvg = _.throttle(function() {
+    if (activeStreamComputationInProgress) {
+        throttledComputeActiveStreamSvg();
+        return;
+    }
+
+    activeStreamComputationInProgress = true;
+    exports.computeActiveStreamSvg(function() {
         activeStreamComputationInProgress = false;
     });
-    stream = targetId = null;
-};
-var throttledComputeActiveStreamSvg = _.throttle(exports.computeActiveStreamSvg, Math.pow(2, 14));
+}, Math.pow(2, 14));
 
 function connectPsql() {
     LocationMgrLogger('psql', 'connect');
@@ -184,11 +223,17 @@ function connectPsql() {
                         heading REAL,
                         speed REAL,
                         accuracy REAL
-                    )
+                    );
+                    CREATE TABLE pathref(
+                        _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        filename CHARACTER(17),
+                        location UUID,
+                        target CHARACTER(24)
+                    );
                 `, function(err, res) {
                     if (err) {
                         exports.pgStatus = pgConnectionStatusList[4];
-                        done();
+                        done(err);
                         return;
                     } else {
                         exports.pg = client;
@@ -327,11 +372,21 @@ function handleWriteStreamError(event) {
 
 function handleWriteStreamFinish(event) {
     var activePath = this.path;
-    var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec('./.svg_db/UFFSDjgs*eSAhI*lwRNP~RKu/_active.svg')[1];
-    var filename = activePath.replace('/_active.svg', '/' + targetLastSeen[targetId].getTime() + '.svg');
+    var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
+    var filename = targetLastSeen[targetId].getTime() + '.svg';
+    var filepath = activePath.replace('/_active.svg', '/' + filename);
 
-    fs.rename(activePath, filename, function(err) {
-        LocationMgrLogger('fs', 'archive complete');
+    fs.rename(activePath, filepath, function(err) {
+        if (err) {
+            LocationMgrLogger('fs', 'archive err');
+            return;
+        }
+
+        exports.pg.query(format(`
+            UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
+        `, filename, targetId, activeStreamFilename), function(err, res) {
+            LocationMgrLogger('fs', 'archive success');
+        });
     });
 };
 
