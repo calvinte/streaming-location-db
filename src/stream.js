@@ -20,13 +20,29 @@ exports.Stream = function Stream() {
 
     this.bus = new Bacon.Bus();
     this.prefix = streamPrefix;
-    exports.streams[streamPrefix] = this.bus;
+    this.clientSockets = {};
+    this.clientCloseListeners = [];
+
+    exports.streams[streamPrefix] = this;
 
     StreamLogger('create', streamPrefix);
     return this;
 }
 
 exports.Stream.prototype = {
+    closeClient: function(clientSocketIndex) {
+        delete this.clientSockets[clientSocketIndex];
+        this.clientCloseListeners.forEach(function(fn) {
+            fn.call(this, clientSocketIndex);
+        });
+    },
+    getSockets: function() {
+        var i = -1, clientSocketIndex, sockets = Array(Object.getOwnPropertyNames(this.clientSockets).length);
+        for (clientSocketIndex in this.clientSockets) {
+            sockets[++i] = Socket.clientSockets[clientSocketIndex];
+        }
+        return sockets;
+    },
     end: function() {
         delete exports.streams[this.prefix];
         this.bus.end.apply(this.bus, arguments);
@@ -36,6 +52,15 @@ exports.Stream.prototype = {
         this.bus.error.apply(this.bus, arguments);
         StreamLogger('bus', 'error');
     },
+    offClientClose: function(fn) {
+        var fnIdx = this.clientCloseListeners.indexOf(fn);
+        if (fnIdx > -1) {
+            this.clientCloseListeners.splice(fnIdx, 1);
+        }
+    },
+    onClientClose: function(fn) {
+        this.clientCloseListeners.push(fn);
+    },
     plug: function() {
         // @TODO not really suported, gotta think about this
         return null;
@@ -44,7 +69,6 @@ exports.Stream.prototype = {
     },
     push: function() {
         this.bus.push.apply(this.bus, arguments);
-        StreamLogger('bus', 'push');
     },
 };
 

@@ -1,13 +1,14 @@
 var WebSocket = require('ws');
+
+var Message = require('./message');
 var StreamMgr = require('./stream');
 var SocketLogger = require('./logger').Logger('socket');
-var locationStream = require('./locationMgr');
+var locationStream = require('./location');
 
-var maxMessageLength = Math.pow(2, 14);
 var server = null;
-var sockets = [];
 
 exports.port = 3002;
+exports.clientSockets = [];
 exports.checkStatus = function checkStatus(cb) {
     var stream = new StreamMgr.Stream();
     var client = new WebSocket('ws://localhost:' + exports.port);
@@ -58,16 +59,19 @@ exports.getServer = function getServer() {
 };
 
 function handleClientClose(event) {
-    var socketIndex;
+    var streamPrefix, clientSocketIndex = exports.clientSockets.indexOf(this);
 
-    socketIndex = sockets.indexOf(this);
-
-    if (socketIndex === -1) {
+    if (clientSocketIndex === -1) {
         SocketLogger('client', 'close', 'error, client not found');
         return null;
     }
 
-    sockets.splice(socketIndex, 1);
+    for (streamPrefix in socketStreamMap[clientSocketIndex]) {
+        StreamMgr.streams[streamPrefix].closeClient(clientSocketIndex);
+    }
+
+    socketStreamMap[clientSocketIndex] = null
+    exports.clientSockets[clientSocketIndex] = null;
     SocketLogger('client', 'close');
 };
 
@@ -79,16 +83,24 @@ function handleClientException(exception) {
     SocketLogger('client', 'exception');
 }
 
+var socketStreamMap = {};
 function handleClientMessage(message) {
     var stream, streamPrefix = message.substr(0, StreamMgr.streamPrefixLength);
+    var clientSocketIndex;
 
-    if (message.length > maxMessageLength) {
+    if (message.length > Message.maxLength) {
         handleClientException(null);
         return;
     }
 
     if (streamPrefix && (stream = StreamMgr.streams[streamPrefix])) {
-        stream.push(message.substr(StreamMgr.streamPrefixLength, maxMessageLength));
+        clientSocketIndex = exports.clientSockets.indexOf(this);
+
+        socketStreamMap[clientSocketIndex] = socketStreamMap[clientSocketIndex] || {};
+        socketStreamMap[clientSocketIndex][streamPrefix] = true;
+        stream.clientSockets[clientSocketIndex] = true;
+
+        stream.push(new Message(message, streamPrefix, clientSocketIndex));
     } else {
         handleClientException(message);
     }
@@ -98,13 +110,13 @@ function handleClientOpen(event) {
     SocketLogger('client', 'open');
 };
 
-function handleServerConnection(socket) {
-    sockets.push(socket);
+function handleServerConnection(clientSocket) {
+    exports.clientSockets.push(clientSocket);
 
-    socket.on('close', handleClientClose);
-    socket.on('error', handleClientError);
-    socket.on('open', handleClientOpen);
-    socket.on('message', handleClientMessage);
+    clientSocket.on('close', handleClientClose);
+    clientSocket.on('error', handleClientError);
+    clientSocket.on('open', handleClientOpen);
+    clientSocket.on('message', handleClientMessage);
     SocketLogger('server', 'connection');
 };
 

@@ -3,7 +3,7 @@ var async = require('async');
 var _ = require('underscore');
 var WebSocket = require('ws');
 
-var LocationMgr = require('../src/locationMgr');
+var LocationMgr = require('../src/location');
 var Socket = require('../src/socket');
 var specLocations= require('./locations');
 var Stream = require('../src/stream');
@@ -100,7 +100,9 @@ describe('Streaming Locations -> SVG', function() {
 
             server.stopServer(function(err) {
                 assert.equal(null, err);
-                done();
+                setTimeout(function() {
+                    done();
+                }, 50);
             });
         });
     });
