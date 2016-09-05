@@ -81,7 +81,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg() {
         height = pathDetails.bounds[3] - pathDetails.bounds[1];
         //fileSize.fd, fileSize.fileSize, stream.writeStream
         if (stream.fileSize === 0) {
-            stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg">');
+            stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">');
         }
 
         stream.writeStream.write(pathDetails.path);
@@ -363,10 +363,6 @@ function locationStreamToBezier(points) {
     }
 
     var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
-    bounds[0] = Math.floor(bounds[0]);
-    bounds[1] = Math.floor(bounds[1]);
-    bounds[2] = Math.ceil(bounds[2]);
-    bounds[3] = Math.ceil(bounds[3]);
     return {
         anchors: anchors,
         bounds: bounds,
