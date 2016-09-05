@@ -18,6 +18,7 @@ var pgConnectionStatusList = [
     'DONE',
     'FAIL',
 ];
+
 var fsSetupStatusList = [
     'NEW',
     'SETUP',
@@ -44,7 +45,8 @@ exports.stream.onClientClose(function(clientSocketIndex) {
     var targetId;
     for (targetId in clientTargetMap[clientSocketIndex]) {
         if (activeStreams[targetId] && activeStreams[targetId].writeStream) {
-            activeStreams[targetId].writeStream.end();
+            activeStreams[targetId].writeStream.end(svgCloseStr);
+            activeStreams[targetId].fileSize += svgCloseStr.length;
         }
         activeStreams[targetId] = null;
     }
@@ -94,10 +96,12 @@ exports.whenReady = function(fn) {
 var svgCloseStr = '</svg>';
 var activeStreamTargetPersistedLocationIdMap = {};
 var computeActiveStreamSvgCount = -1;
+exports.autoComputeSvg = true;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     var targetPathAnchors = {};
-    var targetId, stream, pathDetails, width, height;
+    var targetId, stream, pathDetails, width, height, lastAnchor;
     var row, i, j, query;
+    var computeActiveStreamSvgIdx = ++computeActiveStreamSvgCount;
 
     for (targetId in activeStreams) {
         stream = activeStreams[targetId];
@@ -106,7 +110,9 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
             continue;
         }
 
+        lastAnchor = _.clone(_.last(stream));
         pathDetails = locationStreamToBezier(stream);
+
         width = pathDetails.bounds[2] - pathDetails.bounds[0];
         height = pathDetails.bounds[3] - pathDetails.bounds[1];
         targetPathAnchors[targetId] = pathDetails.anchors;
@@ -116,19 +122,21 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
 
         if (pathDetails.origPath) {
             stream.writeStream.write(pathDetails.origPath);
+            stream.fileSize += pathDetails.origPath.length;
         }
 
         stream.writeStream.write(pathDetails.path);
-        stream.writeStream.write(svgCloseStr);
+        stream.fileSize += pathDetails.path.length;
 
         if (!exports.pg || exports.pgStatus !== pgConnectionStatusList[3]) {
             LocationMgrLogger('psql', 'err');
             return;
         }
 
+        stream.lastAnchor = lastAnchor;
         activeStreams[targetId].splice(0, stream.length);
 
-        targetId = stream = pathDetails = width = height = null;
+        targetId = stream = pathDetails = width = height, lastAnchor = null;
     }
 
     exports.pg.query(format(`
@@ -163,7 +171,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         }
     });
 
-    function anchorsToInsertArr(anchors) {
+    function anchorsToInsertArr(anchors, targetId) {
         return _.map(anchors, function(location) {
             var coordString = location.coordinates.join(' ');
             if (location.coordinates.length === 2) {
@@ -175,8 +183,13 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         });
     }
 };
+
 var activeStreamComputationInProgress = false;
 var throttledComputeActiveStreamSvg = _.throttle(function() {
+    if (!exports.autoComputeSvg) {
+        return;
+    }
+
     if (activeStreamComputationInProgress) {
         throttledComputeActiveStreamSvg();
         return;
@@ -430,11 +443,17 @@ function locationStreamToBezier(points) {
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
-    var prevAnchor = points[0].coordinates;
-    var prevPoint = prevAnchor;
-    var anchors = [points[0]];
+    var prevAnchor, prevPoint, anchors;
     var path = d3.path();
     var origPath = null;
+
+    if (points.lastAnchor) {
+        prevAnchor = points.lastAnchor.coordinates;
+        anchors = [points.lastAnchor];
+    } else {
+        prevAnchor = points[0].coordinates;
+        anchors = [points[0]];
+    }
 
     path.moveTo.apply(path, locationsToVectorPosition(prevAnchor));
 
@@ -443,10 +462,11 @@ function locationStreamToBezier(points) {
         origPath.moveTo.apply(origPath, locationsToVectorPosition(prevAnchor));
     }
 
-
     minX = maxX = prevAnchor[0];
     minY = maxY = prevAnchor[1];
-    for (i = 1; i < points.length; i++) {
+    prevPoint = prevAnchor;
+
+    for (i = points.lastAnchor ? 0 : 1; i < points.length; i++) {
         point = points[i].coordinates;
 
         anchorRequired = i === points.length - 1; // Last point?
@@ -514,6 +534,7 @@ function locationStreamToBezier(points) {
     }
 
     var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
+
     return {
         anchors: anchors,
         bounds: bounds,

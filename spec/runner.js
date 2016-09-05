@@ -8,6 +8,8 @@ var Socket = require('../src/socket');
 var specLocations= require('./locations');
 var Stream = require('../src/stream');
 
+LocationMgr.autoComputeSvg = true;
+
 describe('Streaming Locations -> SVG', function() {
     var server;
     describe('Start WebSocket Server', function() {
@@ -44,7 +46,8 @@ describe('Streaming Locations -> SVG', function() {
 
     describe('Stream Locations', function() {
         it('should stream lat/lng pairs to the WebSocket Server', function(done) {
-            this.timeout(4000);
+            var fast = LocationMgr.autoComputeSvg ? 1 : 100;
+            this.timeout(400000/fast);
             var client = new WebSocket('ws://localhost:' + Socket.port);
             client.on('open', function() {
                 async.parallel(_.map(specLocations, function(locations, targetId) {
@@ -64,7 +67,7 @@ describe('Streaming Locations -> SVG', function() {
                                 client.send(message, function(err) {
                                     setTimeout(function() {
                                         cb(err);
-                                    }, 4);
+                                    }, 100/fast);
                                 });
                             };
                         }), function(err) {
@@ -86,6 +89,11 @@ describe('Streaming Locations -> SVG', function() {
 
     describe('Compute stream svg', function() {
         it('should create svgs for active streams', function(done) {
+            if (LocationMgr.autoComputeSvg) {
+                done();
+                return;
+            }
+
             LocationMgr.computeActiveStreamSvg(function(err) {
                 assert.equal(null, err);
 
