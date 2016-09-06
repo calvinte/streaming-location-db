@@ -8,7 +8,7 @@ var Socket = require('../src/socket');
 var specLocations= require('./locations');
 var Stream = require('../src/stream');
 
-LocationMgr.autoComputeSvg = false;
+LocationMgr.autoComputeSvg = true;
 
 describe('Streaming Locations -> SVG', function() {
     var server;

@@ -50,7 +50,7 @@ exports.stream.onClientClose(function(clientSocketIndex) {
             activeStreams[targetId].writeStream.end(svgCloseStr);
             activeStreams[targetId].fileSize += svgCloseStr.length;
         }
-        activeStreams[targetId] = null;
+        activeStreams[targetId].push = function() {};
     }
 });
 
@@ -95,15 +95,18 @@ exports.whenReady = function(fn) {
     }
 };
 
-var svgCloseStr = '</svg>';
 var activeStreamTargetPersistedLocationIdMap = {};
 var computeActiveStreamSvgCount = -1;
+
+var svgCloseStr = '</svg>';
+var svgParts = ['<svg version="1.1" baseProfile="full" ', 'viewBox="', null, ' ', null, ' ', null, ' ', null, '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">', svgCloseStr];
 exports.autoComputeSvg = true;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     var targetPathAnchors = {};
-    var targetId, stream, pathDetails, width, height, lastAnchor;
+    var targetId, stream, pathDetails, width, height, lastAnchor, bounds;
     var row, i, j, query;
     var computeActiveStreamSvgIdx = ++computeActiveStreamSvgCount;
+    var writeStr, writeStatus = true;
 
     for (targetId in activeStreams) {
         stream = activeStreams[targetId];
@@ -114,12 +117,27 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
 
         lastAnchor = _.clone(_.last(stream));
         pathDetails = locationStreamToBezier(stream);
-
-        width = pathDetails.bounds[2] - pathDetails.bounds[0];
-        height = pathDetails.bounds[3] - pathDetails.bounds[1];
         targetPathAnchors[targetId] = pathDetails.anchors;
+
+        bounds = _.clone(pathDetails.bounds);
+        if (stream.bounds) {
+            bounds[0] = Math.min(bounds[0], stream.bounds[0]);
+            bounds[1] = Math.min(bounds[1], stream.bounds[1]);
+            bounds[2] = Math.max(bounds[2], stream.bounds[2]);
+            bounds[3] = Math.max(bounds[3], stream.bounds[3]);
+        }
+        stream.bounds = bounds;
+
         if (stream.fileSize === 0) {
-            stream.writeStream.write('<svg version="1.1" baseProfile="full" viewBox="' + pathDetails.bounds[0] + ' ' + pathDetails.bounds[1] + ' ' + width + ' ' + height + '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">');
+            writeStatus = false;
+            stream.viewBox = computeViewBox(bounds);
+            writeStr = svgParts[0] + stream.viewBox + svgParts[9];
+            while (!writeStatus) {
+                writeStatus = stream.writeStream.write(writeStr);
+            }
+
+            stream.fileSize += writeStr.length;
+            stream.writtenBounds = bounds;
         }
 
         if (pathDetails.origPath) {
@@ -202,6 +220,17 @@ var throttledComputeActiveStreamSvg = _.throttle(function() {
         activeStreamComputationInProgress = false;
     });
 }, Math.pow(2, 14));
+
+var viewBoxLength = 50;
+var viewboxDecimals = 6;
+function computeViewBox(bounds) {
+    var i, viewBox = svgParts[1] + bounds[0] + svgParts[3] + bounds[1] + svgParts[5] + (bounds[2] - bounds[0]).toFixed(viewboxDecimals) + svgParts[7] + (bounds[3] - bounds[1]).toFixed(viewboxDecimals);
+    for (i = viewBox.length; i < viewBoxLength; i++) {
+        viewBox += ' ';
+    }
+
+    return viewBox;
+}
 
 function connectPsql() {
     LocationMgrLogger('psql', 'connect');
@@ -384,23 +413,45 @@ function handleWriteStreamFinish(event) {
     var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
     var filename = targetLastSeen[targetId].getTime() + '.svg';
     var filepath = activePath.replace('/_active.svg', '/' + filename);
+    var subWriter, stream;
 
-    fs.rename(activePath, filepath, function(err) {
+    stream = activeStreams[targetId];
+    if (stream.bounds !== stream.writtenBounds) {
+        fs.open(activePath, 'r+', function(err, fd) {
+            if (err) {
+                LocationMgrLogger('fs', 'archive err');
+                return;
+            }
+
+            fs.write(fd, computeViewBox(stream.bounds), svgParts[0].length, null, rename);
+        });
+    } else {
+        rename();
+    }
+
+    function rename(err) {
         if (err) {
             LocationMgrLogger('fs', 'archive err');
             return;
         }
 
-        exports.pg.query(format(`
-            UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
-        `, filename, targetId, activeStreamFilename), function(err, res) {
+        fs.rename(activePath, filepath, function(err) {
             if (err) {
                 LocationMgrLogger('fs', 'archive err');
-            } else {
-                LocationMgrLogger('fs', 'archive success');
+                return;
             }
+
+            exports.pg.query(format(`
+                UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
+            `, filename, targetId, activeStreamFilename), function(err, res) {
+                if (err) {
+                    LocationMgrLogger('fs', 'archive err');
+                } else {
+                    LocationMgrLogger('fs', 'archive success');
+                }
+            });
         });
-    });
+    };
 };
 
 function handleWriteStreamPipe(src) {
@@ -539,11 +590,9 @@ function locationStreamToBezier(points) {
         point = anchorRequired = anchorTangent = pointTangent = deltaT = spliceIdx = spliceBiasCeil = null;
     }
 
-    var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
-
     return {
         anchors: anchors,
-        bounds: bounds,
+        bounds: locationsToVectorPosition([minX, minY], [maxX, maxY]),
         origPath: drawOriginalPath ? '<path d="' + origPath.toString() + '" fill="none" stroke="red" stroke-width="' + minSegmentDegrees + '" />' : null,
         path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + minSegmentDegrees + '" />'
     };
