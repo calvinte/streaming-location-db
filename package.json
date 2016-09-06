@@ -4,6 +4,7 @@
   "description": "Converts sessions of streaming locations to SVG",
   "private": true,
   "dependencies": {
+    "async": "2.0.1",
     "d3": "4.2.2",
     "geolib": "2.0.21",
     "pg": "4.4.0",

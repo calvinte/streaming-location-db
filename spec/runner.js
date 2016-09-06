@@ -10,7 +10,7 @@ var Socket = SocketHelper.Socket;
 var Stream = SocketHelper.Stream;
 var Message = SocketHelper.Message;
 
-LocationMgr.autoComputeSvg = true;
+LocationMgr.autoComputeSvg = false;
 
 describe('Streaming Locations -> SVG', function() {
     var server;
