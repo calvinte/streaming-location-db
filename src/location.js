@@ -221,7 +221,7 @@ var throttledComputeActiveStreamSvg = _.throttle(function() {
     });
 }, Math.pow(2, 14));
 
-var viewBoxLength = 50;
+var viewBoxLength = 43; // ex: `179.999999 179.999999 179.999999 179.999999`
 var viewboxDecimals = 6;
 function computeViewBox(bounds) {
     var i, viewBox = svgParts[1] + bounds[0] + svgParts[3] + bounds[1] + svgParts[5] + (bounds[2] - bounds[0]).toFixed(viewboxDecimals) + svgParts[7] + (bounds[3] - bounds[1]).toFixed(viewboxDecimals);
@@ -316,6 +316,13 @@ function getTargetActiveFilename(targetId, path) {
     return path + '/' + activeStreamFilename;
 };
 
+function getSqDist(p1, p2) {
+    var dx = p1[0] - p2[0],
+    dy = p1[1] - p2[1];
+
+    return dx * dx + dy * dy;
+};
+
 var activeStreamFilename = '_active.svg';
 function getTargetPath(targetId) {
     return exports.svgDir + '/' + targetId;
@@ -363,6 +370,7 @@ function getTargetWriteStream(targetId, cb) {
 
                 activeStreams[targetId].fileDescriptor = fd;
                 activeStreams[targetId].fileSize = stats.size;
+                activeStreams[targetId].targetId = targetId;
                 activeStreams[targetId].writeStream = createActiveStream(file, fd, stats.size);
 
                 cb(null, activeStreams[targetId]);
@@ -482,13 +490,14 @@ function locationsToVectorPosition() {
     return locations;
 }
 
-var minSegmentDegrees = 0.0001 // ~11.06 meters
+var minSegmentDegrees = 0.0001; // ~11.06 meters
+var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
 var radThreshold = 40 / 180 * Math.PI;
 var cumulativeRadThreshold = radThreshold * 6;
 var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;
-    var anchorRequired = false, anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0;
+    var anchorRequired = false, anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0, sqAnchorDistance = null;
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
@@ -521,12 +530,13 @@ function locationStreamToBezier(points) {
         anchorRequired = i === points.length - 1; // Last point?
 
         if (!anchorRequired) {
+            sqAnchorDistance = getSqDist(point, prevAnchor);
             anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
             pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
             deltaT = Math.abs(anchorTangent - pointTangent);
             cumulativeDeltaT += deltaT;
 
-            if (deltaT > radThreshold) {
+            if (deltaT > radThreshold && sqAnchorDistance > sqMinSegmentDegrees) {
                 // Delta angle exceeds minimum, draw an anchor.
                 anchorRequired = true;
             } else if (cumulativeDeltaT > cumulativeRadThreshold) {
