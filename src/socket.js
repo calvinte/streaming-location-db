@@ -11,11 +11,18 @@ var server = null;
 
 exports.port = 3002;
 exports.clientSockets = [];
+var statusCheckStream;
 exports.checkStatus = function checkStatus(cb) {
-    var stream = new StreamMgr.Stream();
     var client = new WebSocket('ws://localhost:' + exports.port);
+
+    if (!statusCheckStream) {
+        statusCheckStream = new StreamMgr.Stream();
+    }
+
+    statusCheckStream.start();
+
     client.on('open', function() {
-        client.send(stream.prefix + 'STATUSCHECK', function(err) {
+        client.send(statusCheckStream.prefix + 'STATUSCHECK', function(err) {
             if (err) {
                 cb(err);
                 return;
@@ -23,7 +30,7 @@ exports.checkStatus = function checkStatus(cb) {
 
             // Timeout allows message to arrive before terminating the client.
             setTimeout(function() {
-                stream.end();
+                statusCheckStream.end();
                 client.terminate();
                 cb(null);
             }, 10);

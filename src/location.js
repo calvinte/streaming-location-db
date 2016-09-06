@@ -40,6 +40,8 @@ exports.queue = async.queue(handleIncomingMessage);
 exports.queue.pause();
 
 exports.stream = new StreamMgr.Stream();
+exports.stream.start();
+
 // @TODO exports.stream.offClientClose
 exports.stream.onClientClose(function(clientSocketIndex) {
     var targetId;

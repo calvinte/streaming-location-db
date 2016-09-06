@@ -20,7 +20,6 @@ exports.Stream = function Stream() {
     }
     streamPrefix += streamIdx.toString();
 
-    this.bus = new Bacon.Bus();
     this.prefix = streamPrefix;
     this.clientSockets = {};
     this.clientCloseListeners = [];
@@ -48,9 +47,15 @@ exports.Stream.prototype = {
     end: function() {
         delete exports.streams[this.prefix];
         this.bus.end.apply(this.bus, arguments);
+        this.bus = null;
         StreamLogger('bus', 'end');
     },
     error: function() {
+        if (!this.bus) {
+            StreamLogger('bus', 'meta error, no bus');
+            return;
+        }
+
         this.bus.error.apply(this.bus, arguments);
         StreamLogger('bus', 'error');
     },
@@ -70,7 +75,20 @@ exports.Stream.prototype = {
         StreamLogger('bus', 'plug');
     },
     push: function() {
+        if (!this.bus) {
+            StreamLogger('bus', 'err');
+            return;
+        }
+
         this.bus.push.apply(this.bus, arguments);
+    },
+    start: function() {
+        if (this.bus) {
+            StreamLogger('bus', 'exists');
+            return;
+        }
+
+        this.bus = new Bacon.Bus();
     },
 };
 
