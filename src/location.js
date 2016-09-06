@@ -1,6 +1,5 @@
 "use strict"
 
-var async = require('async');
 var d3 = require('d3');
 var fs = require('fs');
 var format = require('pg-format');
@@ -37,11 +36,10 @@ connectPsql();
 exports.svgDir = './.svg_db';
 setupSvgFs();
 
-exports.queue = async.queue(handleIncomingMessage);
-exports.queue.pause();
-
 exports.stream = new StreamMgr.Stream();
 exports.stream.start();
+exports.stream.plug();
+exports.stream.onValue(handleIncomingMessage);
 
 // @TODO exports.stream.offClientClose
 exports.stream.onClientClose(function(clientSocketIndex) {
@@ -53,10 +51,6 @@ exports.stream.onClientClose(function(clientSocketIndex) {
         }
         activeStreams[targetId].push = function() {};
     }
-});
-
-exports.stream.bus.onValue(function(message) {
-    exports.queue.push(message);
 });
 
 exports.location = function(options) {
@@ -626,7 +620,7 @@ function processQueue() {
             });
 
             readyListeners = [];
-            exports.queue.resume();
+            exports.stream.unplug();
         }, 10);
     } else if (exports.pgStatus === pgConnectionStatusList[4]) {
         // PG failed.
