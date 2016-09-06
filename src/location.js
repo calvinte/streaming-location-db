@@ -539,7 +539,7 @@ function locationStreamToBezier(points) {
             if (deltaT > radThreshold && sqAnchorDistance > sqMinSegmentDegrees) {
                 // Delta angle exceeds minimum, draw an anchor.
                 anchorRequired = true;
-            } else if (cumulativeDeltaT > cumulativeRadThreshold) {
+            } else if (cumulativeDeltaT > cumulativeRadThreshold && sqAnchorDistance > sqMinSegmentDegrees) {
                 // Cumulative delta angle exceeds minimum, draw an anchor.
                 anchorRequired = true;
             }
