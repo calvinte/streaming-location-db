@@ -3,10 +3,12 @@ var async = require('async');
 var _ = require('underscore');
 var WebSocket = require('ws');
 
+var SocketHelper = require('socket-helper');
 var LocationMgr = require('../src/location');
-var Socket = require('../src/socket');
 var specLocations= require('./locations');
-var Stream = require('../src/stream');
+var Socket = SocketHelper.Socket;
+var Stream = SocketHelper.Stream;
+var Message = SocketHelper.Message;
 
 LocationMgr.autoComputeSvg = false;
 
@@ -23,15 +25,6 @@ describe('Streaming Locations -> SVG', function() {
             if (server === null) {
                 done();
             }
-        });
-    });
-
-    describe('Check WebSocket Server Status', function() {
-        it('should open and close a webSocket connection', function(done) {
-            Socket.checkStatus(function(err) {
-                assert.equal(null, err);
-                done();
-            });
         });
     });
 
@@ -59,12 +52,12 @@ describe('Streaming Locations -> SVG', function() {
                                     time: new Date()
                                 });
 
-                                var message = Stream.compose(LocationMgr.stream.prefix, {
+                                var message = new Message({
                                     location: location,
                                     targetId: targetId
-                                });
+                                }, LocationMgr.stream.prefix);
 
-                                client.send(message, function(err) {
+                                client.send(message.encode(true), function(err) {
                                     setTimeout(function() {
                                         cb(err);
                                     }, 100/fast);
@@ -100,23 +93,6 @@ describe('Streaming Locations -> SVG', function() {
                 setTimeout(function() {
                     done();
                 }, 4);
-            });
-        });
-    });
-
-    describe('Stop WebSocket Server', function() {
-        it('should stop the webSocket server', function(done) {
-            assert(server !== null);
-            if (server === null) {
-                done();
-                return;
-            }
-
-            server.stopServer(function(err) {
-                assert.equal(null, err);
-                setTimeout(function() {
-                    done();
-                }, 1500);
             });
         });
     });

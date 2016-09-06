@@ -9,7 +9,8 @@ var pg = require('pg').native;
 var _ = require('underscore');
 
 var LocationMgrLogger = require('./logger').Logger('location');
-var StreamMgr = require('./stream');
+var SocketHelper = require('socket-helper');
+var StreamMgr = SocketHelper.Stream;
 
 var pgConnectionStatusList = [
     'NEW',
