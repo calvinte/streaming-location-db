@@ -470,7 +470,6 @@ function locationStreamToBezier(points) {
         anchorRequired = i === points.length - 1; // Last point?
 
         if (!anchorRequired) {
-            // cumulative deltaTan !> 180deg
             anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
             pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
             deltaT = Math.abs(anchorTangent - pointTangent);
