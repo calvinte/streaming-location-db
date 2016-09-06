@@ -69,8 +69,11 @@ exports.Stream.prototype = {
         this.clientCloseListeners.push(fn);
     },
     plug: function() {
-        // @TODO not really suported, gotta think about this
-        return null;
+        if (!this.bus) {
+            StreamLogger('bus', 'err');
+            return;
+        }
+
         this.bus.plug.apply(this.bus, arguments);
         StreamLogger('bus', 'plug');
     },
