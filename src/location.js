@@ -413,9 +413,7 @@ function handleWriteStreamFinish(event) {
     var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
     var filename = targetLastSeen[targetId].getTime() + '.svg';
     var filepath = activePath.replace('/_active.svg', '/' + filename);
-    var subWriter, stream;
-
-    stream = activeStreams[targetId];
+    var stream = activeStreams[targetId];
     if (stream.bounds !== stream.writtenBounds) {
         fs.open(activePath, 'r+', function(err, fd) {
             if (err) {
