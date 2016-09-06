@@ -433,7 +433,7 @@ function locationsToVectorPosition() {
 
 var minSegmentDegrees = 0.0001 // ~11.06 meters
 var radThreshold = 40 / 180 * Math.PI;
-var cumulativeRadThreshold = radThreshold * 3;
+var cumulativeRadThreshold = radThreshold * 6;
 var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;
