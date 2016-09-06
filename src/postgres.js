@@ -35,8 +35,9 @@ exports.connectPsql = function connectPsql(cb) {
             WHERE table_name = 'locations'
         `, function(err, res) {
             if (err) {
+                psqlLogger('connection', 'err');
                 exports.pgStatus = exports.pgConnectionStatusList[4];
-                done()
+                done(err)
                 return;
             }
 
@@ -60,6 +61,7 @@ exports.connectPsql = function connectPsql(cb) {
                     CREATE INDEX svg_path ON pathref (target, filename);
                 `, function(err, res) {
                     if (err) {
+                        psqlLogger('connection', 'err');
                         exports.pgStatus = exports.pgConnectionStatusList[4];
                         done(err);
                         return;
@@ -86,9 +88,9 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
         INSERT INTO locations(${_.keys(locationMgr.location.prototype).join(',')}) VALUES %L RETURNING _id
     `, _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true)), function(err, res) {
         if (err) {
-            psqlLogger('connection', 'err');
+            psqlLogger('insert', 'err');
         } else {
-            psqlLogger('connection', 'success' + ':' + res.rowCount);
+            psqlLogger('insert', 'success' + ':' + res.rowCount);
 
             j = -1;
             for (targetId in targetPathAnchors) {
