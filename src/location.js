@@ -383,7 +383,7 @@ function getTargetWriteStream(targetId, cb) {
 var clientTargetMap = {};
 var targetLastSeen = {};
 function handleIncomingMessage(message, cb) {
-    var parsedMessage = message.parse();
+    var parsedMessage = message.parse(true);
     if (typeof parsedMessage.targetId === 'string') {
         clientTargetMap[message.clientSocketIndex] = clientTargetMap[message.clientSocketIndex] || {};
         clientTargetMap[message.clientSocketIndex][parsedMessage.targetId] = true;
