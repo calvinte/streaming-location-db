@@ -1,24 +1,15 @@
-"use strict"
+'use strict'
 
 var async = require('async');
 var d3 = require('d3');
 var fs = require('fs');
-var format = require('pg-format');
 var geolib = require('geolib');
-var pg = require('pg').native;
 var _ = require('underscore');
+var locationPg = require('./postgres');
 
 var LocationMgrLogger = require('./logger').Logger('location');
 var SocketHelper = require('socket-helper');
 var StreamMgr = SocketHelper.Stream;
-
-var pgConnectionStatusList = [
-    'NEW',
-    'CONNECTING',
-    'SETUP',
-    'DONE',
-    'FAIL',
-];
 
 var fsSetupStatusList = [
     'NEW',
@@ -31,8 +22,7 @@ var fsSetupStatusList = [
 // \c streaming_location_svg;
 // CREATE EXTENSION Postgis;
 // CREATE EXTENSION "uuid-ossp";
-exports.pg = null;
-connectPsql();
+locationPg.connectPsql(processQueue);
 
 exports.svgDir = './.svg_db';
 setupSvgFs();
@@ -89,7 +79,7 @@ exports.pathref.prototype = {
 
 var readyListeners = [];
 exports.whenReady = function(fn) {
-    if (exports.pgStatus === pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
+    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
         fn(null);
     } else {
         readyListeners.push(fn);
@@ -105,7 +95,6 @@ exports.autoComputeSvg = true;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     var targetPathAnchors = {};
     var targetId, stream, pathDetails, width, height, lastAnchor, bounds;
-    var row, i, j, query;
     var computeActiveStreamSvgIdx = ++computeActiveStreamSvgCount;
     var writeStr, writeStatus = true;
 
@@ -149,7 +138,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         stream.writeStream.write(pathDetails.path);
         stream.fileSize += pathDetails.path.length;
 
-        if (!exports.pg || exports.pgStatus !== pgConnectionStatusList[3]) {
+        if (!locationPg.pg || locationPg.pgStatus !== locationPg.pgConnectionStatusList[3]) {
             LocationMgrLogger('psql', 'err');
             return;
         }
@@ -160,49 +149,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         targetId = stream = pathDetails = width = height, lastAnchor = null;
     }
 
-    exports.pg.query(format(`
-        INSERT INTO locations(${_.keys(exports.location.prototype).join(',')}) VALUES %L RETURNING _id
-    `, _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true)), function(err, res) {
-        if (err) {
-            LocationMgrLogger('psql', 'err');
-        } else {
-            LocationMgrLogger('psql', 'success' + ':' + res.rowCount);
-
-            j = -1;
-            for (targetId in targetPathAnchors) {
-                for (i in targetPathAnchors[targetId]) {
-                    row = res.rows[++j];
-                    targetPathAnchors[targetId][i]._id = row['_id']
-                }
-            }
-
-            exports.pg.query(format(`
-                INSERT INTO pathref(${_.keys(exports.pathref.prototype).join(',')}) VALUES %L
-            `, _.map(targetPathAnchors, function(anchors, targetId) {
-                return [
-                    activeStreamFilename,
-                    '{' + _.map(anchors, function(anchor) {
-                        return anchor._id;
-                    }).join(',') + '}',
-                    targetId
-                ];
-            })), function(err, res) {
-                cb(err);
-            });
-        }
-    });
-
-    function anchorsToInsertArr(anchors, targetId) {
-        return _.map(anchors, function(location) {
-            var coordString = location.coordinates.join(' ');
-            if (location.coordinates.length === 2) {
-                coordString += ' -999';
-            }
-
-            location.coordinates = `POINTZ(${coordString})`;
-            return _.toArray(location);
-        });
-    }
+    locationPg.insertAnchors(targetPathAnchors, cb);
 };
 
 var activeStreamComputationInProgress = false;
@@ -233,71 +180,6 @@ function computeViewBox(bounds) {
     return viewBox;
 }
 
-function connectPsql() {
-    LocationMgrLogger('psql', 'connect');
-    exports.pgStatus = pgConnectionStatusList[0];
-    pg.connect({
-        database: 'streaming_location_svg',
-        host: 'localhost',
-        password: '',
-        poolIdleTimeout: 60000,
-        poolSize: 43,
-        port: 5432,
-        user: '',
-    }, function(err, client, done) {
-        exports.pgStatus = pgConnectionStatusList[1];
-
-        client.query(`
-            SELECT column_name, data_type
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE table_name = 'locations'
-        `, function(err, res) {
-            if (err) {
-                exports.pgStatus = pgConnectionStatusList[4];
-                done()
-                return;
-            }
-
-            if (res.rowCount === 0) {
-                exports.pgStatus = pgConnectionStatusList[2];
-                client.query(`
-                    CREATE TABLE locations(
-                        _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-                        time TIMESTAMPTZ NOT NULL,
-                        coordinates GEOGRAPHY(POINTZ, 4326) NOT NULL,
-                        heading REAL,
-                        speed REAL,
-                        accuracy REAL
-                    );
-                    CREATE TABLE pathref(
-                        _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-                        filename CHARACTER(17),
-                        target CHARACTER(24),
-                        locations UUID[]
-                    );
-                    CREATE INDEX svg_path ON pathref (target, filename);
-                `, function(err, res) {
-                    if (err) {
-                        exports.pgStatus = pgConnectionStatusList[4];
-                        done(err);
-                        return;
-                    } else {
-                        exports.pg = client;
-                        exports.pgStatus = pgConnectionStatusList[3];
-                        processQueue();
-                        done();
-                    }
-                });
-            } else {
-                exports.pg = client;
-                exports.pgStatus = pgConnectionStatusList[3];
-                processQueue();
-                done();
-            }
-        })
-    });
-};
-
 function createActiveStream(file, fd, fileSize) {
     var writer = fs.createWriteStream(file, {fd: fd, start: Math.max(0, fileSize - svgCloseStr.length)});
     writer.on('close', handleWriteStreamClose);
@@ -314,7 +196,7 @@ function getTargetActiveFilename(targetId, path) {
         path = getTargetPath(targetId);
     }
 
-    return path + '/' + activeStreamFilename;
+    return path + '/' + exports.activeStreamFilename;
 };
 
 function getSqDist(p1, p2) {
@@ -324,7 +206,7 @@ function getSqDist(p1, p2) {
     return dx * dx + dy * dy;
 };
 
-var activeStreamFilename = '_active.svg';
+exports.activeStreamFilename = '_active.svg';
 function getTargetPath(targetId) {
     return exports.svgDir + '/' + targetId;
 };
@@ -448,9 +330,7 @@ function handleWriteStreamFinish(event) {
                 return;
             }
 
-            exports.pg.query(format(`
-                UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
-            `, filename, targetId, activeStreamFilename), function(err, res) {
+            locationDb.updateAnchorsFilename(filename, targetId, exports.activeStreamFilename, function(err, res) {
                 if (err) {
                     LocationMgrLogger('fs', 'archive err');
                 } else {
@@ -616,7 +496,7 @@ function locationToLatLng(location) {
 };
 
 function processQueue() {
-    if (exports.pgStatus === pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
+    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
         LocationMgrLogger('processQueue', 'READY')
 
         // PG and FS ready!
@@ -628,11 +508,11 @@ function processQueue() {
             readyListeners = [];
             exports.queue.resume();
         }, 10);
-    } else if (exports.pgStatus === pgConnectionStatusList[4]) {
+    } else if (locationPg.pgStatus === locationPg.pgConnectionStatusList[4]) {
         // PG failed.
         LocationMgrLogger('processQueue', 'PGFAIL')
         readyListeners.forEach(function(fn) {
-            fn(exports.pgStatus);
+            fn(locationPg.pgStatus);
         });
         readyListeners = [];
     } else if (exports.svgDirStatus === fsSetupStatusList[3]) {
