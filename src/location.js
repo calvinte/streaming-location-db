@@ -74,13 +74,13 @@ exports.location.prototype = {
 
 exports.pathref = function(options) {
     this.file = options.file || exports.pathref.prototype.file;
-    this.location = options.location || exports.pathref.prototype.location;
+    this.locations = options.locations || exports.pathref.prototype.locations;
     this.target = options.target || exports.pathref.prototype.target;
 };
 
 exports.pathref.prototype = {
     'filename': null,
-    'location': null,
+    'locations': null,
     'target': null,
 };
 
@@ -157,15 +157,15 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
 
             exports.pg.query(format(`
                 INSERT INTO pathref(${_.keys(exports.pathref.prototype).join(',')}) VALUES %L
-            `, _.flatten(_.map(targetPathAnchors, function(anchors, targetId) {
-                return _.map(anchors, function(anchor) {
-                    return [
-                        activeStreamFilename,
-                        anchor._id,
-                        targetId
-                    ];
-                });
-            }), true)), function(err, res) {
+            `, _.map(targetPathAnchors, function(anchors, targetId) {
+                return [
+                    activeStreamFilename,
+                    '{' + _.map(anchors, function(anchor) {
+                        return anchor._id;
+                    }).join(',') + '}',
+                    targetId
+                ];
+            })), function(err, res) {
                 cb(err);
             });
         }
@@ -240,9 +240,10 @@ function connectPsql() {
                     CREATE TABLE pathref(
                         _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
                         filename CHARACTER(17),
-                        location UUID,
-                        target CHARACTER(24)
+                        target CHARACTER(24),
+                        locations UUID[]
                     );
+                    CREATE INDEX svg_path ON pathref (target, filename);
                 `, function(err, res) {
                     if (err) {
                         exports.pgStatus = pgConnectionStatusList[4];
@@ -398,7 +399,11 @@ function handleWriteStreamFinish(event) {
         exports.pg.query(format(`
             UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
         `, filename, targetId, activeStreamFilename), function(err, res) {
-            LocationMgrLogger('fs', 'archive success');
+            if (err) {
+                LocationMgrLogger('fs', 'archive err');
+            } else {
+                LocationMgrLogger('fs', 'archive success');
+            }
         });
     });
 };

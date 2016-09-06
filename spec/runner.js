@@ -116,7 +116,7 @@ describe('Streaming Locations -> SVG', function() {
                 assert.equal(null, err);
                 setTimeout(function() {
                     done();
-                }, 50);
+                }, 1500);
             });
         });
     });
