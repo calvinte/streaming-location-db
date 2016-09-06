@@ -340,13 +340,6 @@ function getTargetWriteStream(targetId, cb) {
     }
 };
 
-function getSqDist(p1, p2) {
-    var dx = p1[0] - p2[0],
-    dy = p1[1] - p2[1];
-
-    return dx * dx + dy * dy;
-};
-
 var clientTargetMap = {};
 var targetLastSeen = {};
 function handleIncomingMessage(message, cb) {
@@ -439,12 +432,12 @@ function locationsToVectorPosition() {
 }
 
 var minSegmentDegrees = 0.0001 // ~11.06 meters
-var sqMinSegmentDegrees = Math.pow(minSegmentDegrees, 2);
-var thresholdRad = 45 / 180 * Math.PI;
+var radThreshold = 40 / 180 * Math.PI;
+var cumulativeRadThreshold = radThreshold * 3;
 var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;
-    var anchorRequired, sqAnchorDistance = null, anchorTangent = null, pointTangent;
+    var anchorRequired = false, anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0;
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
@@ -477,16 +470,23 @@ function locationStreamToBezier(points) {
         anchorRequired = i === points.length - 1; // Last point?
 
         if (!anchorRequired) {
-            sqAnchorDistance = getSqDist(point, prevAnchor);
-            if (sqAnchorDistance > sqMinSegmentDegrees) {
-                // Distance exceeds minimum.
-                anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
-                pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
-                if (Math.abs(anchorTangent - pointTangent) > thresholdRad) {
-                    // Delta angle exceeds minimum, draw an anchor.
-                    anchorRequired = true;
-                }
+            // cumulative deltaTan !> 180deg
+            anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
+            pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
+            deltaT = Math.abs(anchorTangent - pointTangent);
+            cumulativeDeltaT += deltaT;
+
+            if (deltaT > radThreshold) {
+                // Delta angle exceeds minimum, draw an anchor.
+                anchorRequired = true;
+            } else if (cumulativeDeltaT > cumulativeRadThreshold) {
+                // Cumulative delta angle exceeds minimum, draw an anchor.
+                anchorRequired = true;
             }
+        }
+
+        if (anchorRequired) {
+            cumulativeDeltaT = 0;
         }
 
         minX = Math.min(point[0], minX);
@@ -535,7 +535,7 @@ function locationStreamToBezier(points) {
         }
 
         prevPoint = point;
-        point = anchorRequired = sqAnchorDistance = anchorTangent = pointTangent = spliceIdx = spliceBiasCeil = null;
+        point = anchorRequired = anchorTangent = pointTangent = deltaT = spliceIdx = spliceBiasCeil = null;
     }
 
     var bounds = locationsToVectorPosition([minX, minY], [maxX, maxY]);
