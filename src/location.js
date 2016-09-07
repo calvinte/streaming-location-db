@@ -30,7 +30,8 @@ exports.stream.onClientClose(function(clientSocketIndex) {
             activeStreams[targetId].writeStream.end(svgCloseStr);
             activeStreams[targetId].fileSize += svgCloseStr.length;
         }
-        activeStreams[targetId].push = function() {};
+        LocationMgrLogger('streaming', 'end:' + targetId);
+        activeStreams[targetId].push = handleDeadStreamMessage;
     }
 });
 
@@ -180,40 +181,46 @@ function getSqDist(p1, p2) {
     return dx * dx + dy * dy;
 };
 
+function handleDeadStreamMessage(location) {
+    LocationMgrLogger('phantom stream', 'err');
+};
+
 var activeStreams = {};
 var clientTargetMap = {};
 exports.targetLastSeen = {};
 var i = -1;
 function handleIncomingMessage(message, cb) {
     var parsedMessage = message.parse(true);
-    if (typeof parsedMessage.targetId === 'string') {
+    var targetId = parsedMessage.targetId;
+    if (typeof targetId === 'string') {
         clientTargetMap[message.clientSocketIndex] = clientTargetMap[message.clientSocketIndex] || {};
-        clientTargetMap[message.clientSocketIndex][parsedMessage.targetId] = true;
-        exports.targetLastSeen[parsedMessage.targetId] = new Date();
+        clientTargetMap[message.clientSocketIndex][targetId] = true;
+        exports.targetLastSeen[targetId] = new Date();
 
-        if (activeStreams[parsedMessage.targetId] instanceof Array) {
-            activeStreams[parsedMessage.targetId].push(parsedMessage.location);
+        if (activeStreams[targetId] instanceof Array) {
+            activeStreams[targetId].push(parsedMessage.location);
             throttledComputeActiveStreamSvg();
             cb(null);
         } else {
-            activeStreams[parsedMessage.targetId] = [];
-            locationFS.getTargetWriteStream(parsedMessage.targetId, function(err, details) {
+            LocationMgrLogger('streaming', 'start:' + targetId);
+            activeStreams[targetId] = [];
+            locationFS.getTargetWriteStream(targetId, function(err, details) {
                 if (err) {
                     LocationMgrLogger('value', 'err');
                     cb(err);
                 } else {
                     throttledComputeActiveStreamSvg();
 
-                    activeStreams[parsedMessage.targetId].fileDescriptor = details.fd;
-                    activeStreams[parsedMessage.targetId].fileSize = details.size;
-                    activeStreams[parsedMessage.targetId].targetId = parsedMessage.targetId;
-                    activeStreams[parsedMessage.targetId].writeStream = locationFS.createActiveStream(details.file, details.fd, details.size - svgCloseStr.length);
-                    activeStreams[parsedMessage.targetId].writeStream.on('close', handleWriteStreamClose);
-                    activeStreams[parsedMessage.targetId].writeStream.on('drain', handleWriteStreamDrain);
-                    activeStreams[parsedMessage.targetId].writeStream.on('error', handleWriteStreamError);
-                    activeStreams[parsedMessage.targetId].writeStream.on('finish', handleWriteStreamFinish);
-                    activeStreams[parsedMessage.targetId].writeStream.on('pupe', handleWriteStreamPipe);
-                    activeStreams[parsedMessage.targetId].writeStream.on('unpipe', handleWriteStreamUnpipe);
+                    activeStreams[targetId].fileDescriptor = details.fd;
+                    activeStreams[targetId].fileSize = details.size;
+                    activeStreams[targetId].targetId = targetId;
+                    activeStreams[targetId].writeStream = locationFS.createActiveStream(details.file, details.fd, details.size - svgCloseStr.length);
+                    activeStreams[targetId].writeStream.on('close', handleWriteStreamClose);
+                    activeStreams[targetId].writeStream.on('drain', handleWriteStreamDrain);
+                    activeStreams[targetId].writeStream.on('error', handleWriteStreamError);
+                    activeStreams[targetId].writeStream.on('finish', handleWriteStreamFinish);
+                    activeStreams[targetId].writeStream.on('pupe', handleWriteStreamPipe);
+                    activeStreams[targetId].writeStream.on('unpipe', handleWriteStreamUnpipe);
                     cb(null);
                 }
             });
@@ -229,17 +236,19 @@ function handleWriteStreamClose(event) {
 };
 
 function handleWriteStreamDrain(event) {
-    LocationMgrLogger('write', 'drain');
+    //LocationMgrLogger('write', 'drain');
 };
 
 function handleWriteStreamError(event) {
-    LocationMgrLogger('write', 'err');
+    //LocationMgrLogger('write', 'err');
 };
 
 function handleWriteStreamFinish() {
     var activeFilename = this.path, newFilename;
     var targetId = new RegExp(locationFS.svgDir + '/(.+?)/', 'g').exec(activeFilename)[1];
     var stream = activeStreams[targetId];
+    delete activeStreams[targetId];
+
     if (stream.bounds !== stream.writtenBounds) {
         locationFS.writeSegment(activeFilename, computeViewBox(stream.bounds), svgParts[0].length, rename);
     } else {
