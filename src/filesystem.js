@@ -48,7 +48,6 @@ exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
 
     fs.access(path, fs.F_OK, function(err) {
         if (err) {
-            fsLogger('fs', 'make target directory');
             fs.mkdir(path, function(err) {
                 if (err) {
                     cb(err, null);
@@ -100,7 +99,7 @@ function getTargetActiveFilename(targetId, path) {
 exports.writeSegment = function writeSegment(path, segment, position, cb) {
     fs.open(path, 'r+', function(err, fd) {
         if (err) {
-            fsLogger('fs', 'archive err');
+            fsLogger('archive', 'err');
             return;
         }
 

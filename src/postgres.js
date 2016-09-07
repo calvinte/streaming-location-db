@@ -16,6 +16,10 @@ var psqlLogger = require('./logger').Logger('psql');
 //
 // again later..
 // SELECT filename, target, array_length(locations, 1) FROM pathref;
+//
+// fresh state:
+// rm -rf .svg_db
+// DROP TABLE locations;DROP TABLE pathref;
 
 exports.pgConnectionStatusList = [
     'NEW',
@@ -48,7 +52,6 @@ exports.connectPsql = function connectPsql(cb) {
             psqlLogger('connection', 'err');
             exports.pgStatus = exports.pgConnectionStatusList[4];
             cb(err);
-            //done(err)
             return;
         }
 
@@ -75,20 +78,19 @@ exports.connectPsql = function connectPsql(cb) {
                     psqlLogger('connection', 'err');
                     exports.pgStatus = exports.pgConnectionStatusList[4];
                     cb(err);
-                    //done(err);
                     return;
                 } else {
+                    psqlLogger('create table', 'success');
                     exports.pg = client;
                     exports.pgStatus = exports.pgConnectionStatusList[3];
                     cb(null);
-                    done(null);
                 }
             });
         } else {
+            psqlLogger('connection', 'success');
             exports.pg = client;
             exports.pgStatus = exports.pgConnectionStatusList[3];
             cb(null, res);
-            //done();
         }
     })
 };
