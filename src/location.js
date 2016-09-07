@@ -388,7 +388,11 @@ function locationStreamToBezier(points) {
             prevAnchor = point;
 
             if (skippedPoints.length === 1) {
-                path.quadraticCurveTo.apply(path, locationsToVectorPosition(skippedPoints[0], point));
+                // qudratic curve to makes nice curves, but they dont serve to
+                // reduce file size..
+                //path.quadraticCurveTo.apply(path, locationsToVectorPosition(skippedPoints[0], point));
+                path.lineTo.apply(path, locationsToVectorPosition(skippedPoints[0]));
+                path.lineTo.apply(path, locationsToVectorPosition(point));
             } else {
                 if (spliceBiasCeil) {
                     spliceIdx = Math.ceil(skippedPoints.length / 2);
