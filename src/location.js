@@ -241,11 +241,11 @@ function handleWriteStreamError(event) {
 };
 
 function handleWriteStreamFinish() {
-    var activePath = this.path;
-    var targetId = new RegExp(locationFS.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
+    var activeFilename = this.path, newFilename;
+    var targetId = new RegExp(locationFS.svgDir + '/(.+?)/', 'g').exec(activeFilename)[1];
     var stream = activeStreams[targetId];
     if (stream.bounds !== stream.writtenBounds) {
-        locationFS.writeSegment(activePath, computeViewBox(stream.bounds), svgParts[0].length, rename);
+        locationFS.writeSegment(activeFilename, computeViewBox(stream.bounds), svgParts[0].length, rename);
     } else {
         rename();
     }
@@ -256,17 +256,17 @@ function handleWriteStreamFinish() {
             return;
         }
 
-        locationFS.archiveSVG(activePath, targetId, function(err) {
+        newFilename = locationFS.archiveSVG(activeFilename, targetId, function(err) {
             if (err) {
                 LocationMgrLogger('fs', 'archive err');
                 return;
             }
 
-            locationPg.updateAnchorsFilename(locationFS.activeStreamFilename, targetId, function(err, res) {
+            locationPg.updateAnchorsFilename(newFilename, targetId, function(err, res) {
                 if (err) {
                     LocationMgrLogger('fs', 'archive err');
                 } else {
-                    LocationMgrLogger('fs', 'archive success');
+                    LocationMgrLogger('fs', 'archive success:' + res.rowCount);
                 }
             });
         });

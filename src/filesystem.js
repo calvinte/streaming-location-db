@@ -113,5 +113,6 @@ exports.archiveSVG = function(activePath, targetId, cb) {
     var filepath = activePath.replace('/_active.svg', '/' + filename);
 
     fs.rename(activePath, filepath, cb);
+    return filename;
 };
 
