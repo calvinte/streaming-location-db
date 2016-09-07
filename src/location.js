@@ -2,21 +2,18 @@
 
 var async = require('async');
 var d3 = require('d3');
-var fs = require('fs');
 var geolib = require('geolib');
 var _ = require('underscore');
+
 var locationPg = require('./postgres');
+var locationFS = require('./filesystem');
 
 var LocationMgrLogger = require('./logger').Logger('location');
 var SocketHelper = require('socket-helper');
 var StreamMgr = SocketHelper.Stream;
 
-var fsSetupStatusList = [
-    'NEW',
-    'SETUP',
-    'DONE',
-    'FAIL',
-];
+exports.queue = async.queue(handleIncomingMessage);
+exports.queue.pause();
 
 // CREATE DATABASE streaming_location_svg;
 // \c streaming_location_svg;
@@ -24,11 +21,7 @@ var fsSetupStatusList = [
 // CREATE EXTENSION "uuid-ossp";
 locationPg.connectPsql(processQueue);
 
-exports.svgDir = './.svg_db';
-setupSvgFs();
-
-exports.queue = async.queue(handleIncomingMessage);
-exports.queue.pause();
+locationFS.setupSvgFs(processQueue);
 
 exports.stream = new StreamMgr.Stream();
 exports.stream.start();
@@ -45,7 +38,7 @@ exports.stream.onClientClose(function(clientSocketIndex) {
     }
 });
 
-exports.stream.bus.onValue(function(message) {
+exports.stream.onValue(function(message) {
     exports.queue.push(message);
 });
 
@@ -79,7 +72,7 @@ exports.pathref.prototype = {
 
 var readyListeners = [];
 exports.whenReady = function(fn) {
-    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
+    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && locationFS.svgDirStatus === locationFS.fsSetupStatusList[2]) {
         fn(null);
     } else {
         readyListeners.push(fn);
@@ -135,7 +128,11 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
             stream.fileSize += pathDetails.origPath.length;
         }
 
-        stream.writeStream.write(pathDetails.path);
+        if (exports.autoComputeSvg) {
+            stream.writeStream.write(pathDetails.path);
+        } else {
+            stream.writeStream.end(pathDetails.path + svgCloseStr);
+        }
         stream.fileSize += pathDetails.path.length;
 
         if (!locationPg.pg || locationPg.pgStatus !== locationPg.pgConnectionStatusList[3]) {
@@ -180,25 +177,6 @@ function computeViewBox(bounds) {
     return viewBox;
 }
 
-function createActiveStream(file, fd, fileSize) {
-    var writer = fs.createWriteStream(file, {fd: fd, start: Math.max(0, fileSize - svgCloseStr.length)});
-    writer.on('close', handleWriteStreamClose);
-    writer.on('drain', handleWriteStreamDrain);
-    writer.on('error', handleWriteStreamError);
-    writer.on('finish', handleWriteStreamFinish);
-    writer.on('pipe', handleWriteStreamPipe);
-    writer.on('unpipe', handleWriteStreamUnpipe);
-    return writer;
-};
-
-function getTargetActiveFilename(targetId, path) {
-    if (!path) {
-        path = getTargetPath(targetId);
-    }
-
-    return path + '/' + exports.activeStreamFilename;
-};
-
 function getSqDist(p1, p2) {
     var dx = p1[0] - p2[0],
     dy = p1[1] - p2[1];
@@ -206,81 +184,44 @@ function getSqDist(p1, p2) {
     return dx * dx + dy * dy;
 };
 
-exports.activeStreamFilename = '_active.svg';
-function getTargetPath(targetId) {
-    return exports.svgDir + '/' + targetId;
-};
-
 var activeStreams = {};
-function getTargetWriteStream(targetId, cb) {
-    var path = getTargetPath(targetId);
-    var file = getTargetActiveFilename(targetId, path);
-
-    if (activeStreams[targetId] instanceof Array) {
-        cb(null, activeStreams[targetId]);
-        return;
-    }
-
-    activeStreams[targetId] = [];
-
-    fs.access(path, fs.F_OK, function(err) {
-        if (err) {
-            LocationMgrLogger('fs', 'make target directory');
-            fs.mkdir(path, function(err) {
-                if (err) {
-                    cb(err, null);
-                } else {
-                    getFile();
-                }
-            });
-        } else {
-            getFile();
-        }
-    });
-
-    function getFile() {
-        fs.open(file, 'w', function(err, fd) {
-            if (err) {
-                cb(err, null);
-                return;
-            }
-
-            fs.fstat(fd, function(err, stats) {
-                if (err) {
-                    cb(err, null);
-                    return;
-                }
-
-                activeStreams[targetId].fileDescriptor = fd;
-                activeStreams[targetId].fileSize = stats.size;
-                activeStreams[targetId].targetId = targetId;
-                activeStreams[targetId].writeStream = createActiveStream(file, fd, stats.size);
-
-                cb(null, activeStreams[targetId]);
-            });
-        });
-    }
-};
-
 var clientTargetMap = {};
-var targetLastSeen = {};
+exports.targetLastSeen = {};
+var i = -1;
 function handleIncomingMessage(message, cb) {
     var parsedMessage = message.parse(true);
     if (typeof parsedMessage.targetId === 'string') {
         clientTargetMap[message.clientSocketIndex] = clientTargetMap[message.clientSocketIndex] || {};
         clientTargetMap[message.clientSocketIndex][parsedMessage.targetId] = true;
-        targetLastSeen[parsedMessage.targetId] = new Date();
+        exports.targetLastSeen[parsedMessage.targetId] = new Date();
 
-        getTargetWriteStream(parsedMessage.targetId, function(err, activeStream) {
-            if (err) {
-                LocationMgrLogger('value', 'err');
-                cb(err);
-            } else {
-                activeStream.push(parsedMessage.location);
-                throttledComputeActiveStreamSvg();
-                cb(null);
-            }
-        });
+        if (activeStreams[parsedMessage.targetId] instanceof Array) {
+            activeStreams[parsedMessage.targetId].push(parsedMessage.location);
+            throttledComputeActiveStreamSvg();
+            cb(null);
+        } else {
+            activeStreams[parsedMessage.targetId] = [];
+            locationFS.getTargetWriteStream(parsedMessage.targetId, function(err, details) {
+                if (err) {
+                    LocationMgrLogger('value', 'err');
+                    cb(err);
+                } else {
+                    throttledComputeActiveStreamSvg();
+
+                    activeStreams[parsedMessage.targetId].fileDescriptor = details.fd;
+                    activeStreams[parsedMessage.targetId].fileSize = details.size;
+                    activeStreams[parsedMessage.targetId].targetId = parsedMessage.targetId;
+                    activeStreams[parsedMessage.targetId].writeStream = locationFS.createActiveStream(details.file, details.fd, details.size - svgCloseStr.length);
+                    activeStreams[parsedMessage.targetId].writeStream.on('close', handleWriteStreamClose);
+                    activeStreams[parsedMessage.targetId].writeStream.on('drain', handleWriteStreamDrain);
+                    activeStreams[parsedMessage.targetId].writeStream.on('error', handleWriteStreamError);
+                    activeStreams[parsedMessage.targetId].writeStream.on('finish', handleWriteStreamFinish);
+                    activeStreams[parsedMessage.targetId].writeStream.on('pupe', handleWriteStreamPipe);
+                    activeStreams[parsedMessage.targetId].writeStream.on('unpipe', handleWriteStreamUnpipe);
+                    cb(null);
+                }
+            });
+        }
     } else {
         LocationMgrLogger('value', 'err');
         cb('target id not found');
@@ -299,21 +240,12 @@ function handleWriteStreamError(event) {
     LocationMgrLogger('write', 'err');
 };
 
-function handleWriteStreamFinish(event) {
+function handleWriteStreamFinish() {
     var activePath = this.path;
-    var targetId = new RegExp(exports.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
-    var filename = targetLastSeen[targetId].getTime() + '.svg';
-    var filepath = activePath.replace('/_active.svg', '/' + filename);
+    var targetId = new RegExp(locationFS.svgDir + '/(.+?)/', 'g').exec(activePath)[1];
     var stream = activeStreams[targetId];
     if (stream.bounds !== stream.writtenBounds) {
-        fs.open(activePath, 'r+', function(err, fd) {
-            if (err) {
-                LocationMgrLogger('fs', 'archive err');
-                return;
-            }
-
-            fs.write(fd, computeViewBox(stream.bounds), svgParts[0].length, null, rename);
-        });
+        locationFS.writeSegment(activePath, computeViewBox(stream.bounds), svgParts[0].length, rename);
     } else {
         rename();
     }
@@ -324,13 +256,13 @@ function handleWriteStreamFinish(event) {
             return;
         }
 
-        fs.rename(activePath, filepath, function(err) {
+        locationFS.archiveSVG(activePath, targetId, function(err) {
             if (err) {
                 LocationMgrLogger('fs', 'archive err');
                 return;
             }
 
-            locationDb.updateAnchorsFilename(filename, targetId, exports.activeStreamFilename, function(err, res) {
+            locationPg.updateAnchorsFilename(locationFS.activeStreamFilename, targetId, function(err, res) {
                 if (err) {
                     LocationMgrLogger('fs', 'archive err');
                 } else {
@@ -495,8 +427,12 @@ function locationToLatLng(location) {
     return location.coordinates.slice(0, 2);
 };
 
-function processQueue() {
-    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && exports.svgDirStatus === fsSetupStatusList[2]) {
+function processQueue(err) {
+    if (err !== null) {
+        LocationMgrLogger('processQueue', 'err')
+    }
+
+    if (locationPg.pgStatus === locationPg.pgConnectionStatusList[3] && locationFS.svgDirStatus === locationFS.fsSetupStatusList[2]) {
         LocationMgrLogger('processQueue', 'READY')
 
         // PG and FS ready!
@@ -515,34 +451,13 @@ function processQueue() {
             fn(locationPg.pgStatus);
         });
         readyListeners = [];
-    } else if (exports.svgDirStatus === fsSetupStatusList[3]) {
+    } else if (locationFS.svgDirStatus === locationFS.fsSetupStatusList[3]) {
         // FS failed.
         LocationMgrLogger('processQueue', 'FSFAIL')
         readyListeners.forEach(function(fn) {
-            fn(exports.svgDirStatus);
+            fn(locationFS.svgDirStatus);
         });
         readyListeners = [];
     }
-};
-
-function setupSvgFs() {
-    LocationMgrLogger('fs', 'setup');
-    exports.svgDirStatus = fsSetupStatusList[0];
-    fs.access(exports.svgDir, fs.F_OK, function(err) {
-        if (err) {
-            exports.svgDirStatus = fsSetupStatusList[1];
-            fs.mkdir(exports.svgDir, function(err) {
-                if (err) {
-                    exports.svgDirStatus = fsSetupStatusList[3];
-                } else {
-                    exports.svgDirStatus = fsSetupStatusList[2];
-                    processQueue();
-                }
-            });
-        } else {
-            exports.svgDirStatus = fsSetupStatusList[2];
-            processQueue();
-        }
-    });
 };
 

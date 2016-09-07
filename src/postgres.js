@@ -5,6 +5,7 @@ var _ = require('underscore');
 var psqlLogger = require('./logger').Logger('psql');
 var format = require('pg-format');
 var locationMgr = require('./location');
+var locationFs = require('./filesystem');
 
 exports.pgConnectionStatusList = [
     'NEW',
@@ -37,6 +38,7 @@ exports.connectPsql = function connectPsql(cb) {
             if (err) {
                 psqlLogger('connection', 'err');
                 exports.pgStatus = exports.pgConnectionStatusList[4];
+                cb(err);
                 done(err)
                 return;
             }
@@ -63,13 +65,14 @@ exports.connectPsql = function connectPsql(cb) {
                     if (err) {
                         psqlLogger('connection', 'err');
                         exports.pgStatus = exports.pgConnectionStatusList[4];
+                        cb(err);
                         done(err);
                         return;
                     } else {
                         exports.pg = client;
                         exports.pgStatus = exports.pgConnectionStatusList[3];
-                        cb(err, res);
-                        done();
+                        cb(null);
+                        done(null);
                     }
                 });
             } else {
@@ -104,7 +107,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
                 INSERT INTO pathref(${_.keys(locationMgr.pathref.prototype).join(',')}) VALUES %L
             `, _.map(targetPathAnchors, function(anchors, targetId) {
                 return [
-                    locationMgr.activeStreamFilename,
+                    locationFs.activeStreamFilename,
                     '{' + _.map(anchors, function(anchor) {
                         return anchor._id;
                     }).join(',') + '}',
@@ -129,9 +132,9 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
     }
 };
 
-exports.updateAnchorsFilename = function updateAnchorsFilename(filename, targetId) {
+exports.updateAnchorsFilename = function updateAnchorsFilename(filename, targetId, cb) {
     exports.pg.query(format(`
         UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
-    `, filename, targetId, locationMgr.activeStreamFilename), cb);
+    `, filename, targetId, locationFs.activeStreamFilename), cb);
 };
 
