@@ -248,21 +248,21 @@ function handleWriteStreamFinish() {
 
     function rename(err) {
         if (err) {
-            LocationMgrLogger('fs', 'archive err');
+            LocationMgrLogger('archive', 'fs err');
             return;
         }
 
         newFilename = locationFS.archiveSVG(activeFilename, targetId, function(err) {
             if (err) {
-                LocationMgrLogger('fs', 'archive err');
+                LocationMgrLogger('archive', 'fs err');
                 return;
             }
 
             locationPg.updateAnchorsFilename(newFilename, targetId, function(err, res) {
                 if (err) {
-                    LocationMgrLogger('fs', 'archive err');
+                    LocationMgrLogger('archive', 'pg err');
                 } else {
-                    LocationMgrLogger('fs', 'archive success:' + res.rowCount);
+                    LocationMgrLogger('archive', 'success:' + res.rowCount);
                 }
             });
         });
