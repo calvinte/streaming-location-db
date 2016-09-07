@@ -15,10 +15,6 @@ var StreamMgr = SocketHelper.Stream;
 exports.queue = async.queue(handleIncomingMessage);
 exports.queue.pause();
 
-// CREATE DATABASE streaming_location_svg;
-// \c streaming_location_svg;
-// CREATE EXTENSION Postgis;
-// CREATE EXTENSION "uuid-ossp";
 locationPg.connectPsql(processQueue);
 
 locationFS.setupSvgFs(processQueue);

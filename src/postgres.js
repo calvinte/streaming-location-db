@@ -7,6 +7,14 @@ var format = require('pg-format');
 var locationMgr = require('./location');
 var locationFs = require('./filesystem');
 
+// CREATE DATABASE streaming_location_svg;
+// \c streaming_location_svg;
+// CREATE EXTENSION Postgis;
+// CREATE EXTENSION "uuid-ossp";
+//
+// again later..
+// SELECT filename, target, array_length(locations, 1) FROM pathref;
+
 exports.pgConnectionStatusList = [
     'NEW',
     'CONNECTING',
