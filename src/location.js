@@ -286,7 +286,7 @@ function handleWriteStreamUnpipe(src) {
     LocationMgrLogger('write', 'unpipe');
 };
 
-var svgDecimalPrecision = 3;
+var svgDecimalPrecision = 5;
 function locationsToVectorPosition() {
     var _args = arguments;
     var i, j, locations = Array(arguments.length * 2);
