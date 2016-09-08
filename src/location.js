@@ -309,31 +309,31 @@ function locationsToVectorPosition() {
 }
 
 var radianEdges = [
+    Math.PI,
     90 / 180 * Math.PI,
-    45 / 180 * Math.PI,
 ];
-var deltaRadianEdges = radianEdges[1] - radianEdges[0];
-var cumulativeRadianMultiplier = 6;
+var deltaRadianEdges = radianEdges[0] - radianEdges[1];
 
-var distanceEdges = [
-    0.0001, // ~11.06 meters
-    0.01, // ~1105.74 meters
+var sqDistanceEdges = [
+    Math.pow(0.0001, 2), // ~11.06 meters
+    Math.pow(0.01, 2), // ~1105.74 meters
 ];
-
-var sqMinSegmentDegrees = Math.pow(distanceEdges[0], 2);
 
 var drawOriginalPath = true;
 function locationStreamToBezier(points) {
     var i, point = null, skippedPoints = null;
-    var anchorRequired = false, anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0, sqAnchorDistance = null;
+
+    var anchorRequired = false;
+    var anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0;
+    var sqPointDistance = null, cumulativeAnchorDistance = null, distanceMultiplier = null;
+    var radianThreshold = null;
+
     var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
     var minX, maxX, minY, maxY;
 
     var prevAnchor, prevPoint, anchors;
     var path = d3.path();
     var origPath = null;
-    var distanceMultiplier = null;
-    var radianThreshold = null, cumulativeRadianThreshold = null;
 
     if (points.lastAnchor) {
         prevAnchor = points.lastAnchor.coordinates;
@@ -360,27 +360,28 @@ function locationStreamToBezier(points) {
         anchorRequired = i === points.length - 1; // Last point?
 
         if (!anchorRequired) {
-            sqAnchorDistance = getSqDist(point, prevAnchor);
-            distanceMultiplier = Math.max(sqAnchorDistance - distanceEdges[0], distanceEdges[0]) / distanceEdges[1];
-            radianThreshold = radianEdges[0] + deltaRadianEdges * distanceMultiplier;
-            cumulativeRadianThreshold = cumulativeRadianMultiplier * radianThreshold;
+            sqPointDistance = getSqDist(point, prevPoint);
+            cumulativeAnchorDistance += sqPointDistance;
 
-            anchorTangent = Math.abs(Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]));
-            pointTangent = Math.abs(Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]));
-            deltaT = Math.abs(anchorTangent - pointTangent);
-            cumulativeDeltaT += deltaT;
+            if (cumulativeAnchorDistance > sqDistanceEdges[0]) {
+                anchorTangent = Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]);
+                pointTangent = Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]);
+                deltaT = Math.abs(anchorTangent - pointTangent);
+                cumulativeDeltaT += deltaT;
 
-            if (deltaT > radianThreshold && sqAnchorDistance > sqMinSegmentDegrees) {
-                // Delta angle exceeds minimum, draw an anchor.
-                anchorRequired = true;
-            } else if (cumulativeDeltaT > cumulativeRadianThreshold && sqAnchorDistance > sqMinSegmentDegrees) {
-                // Cumulative delta angle exceeds minimum, draw an anchor.
-                anchorRequired = true;
+                distanceMultiplier = Math.max(cumulativeAnchorDistance - sqDistanceEdges[0], sqDistanceEdges[0]) / sqDistanceEdges[1];
+                radianThreshold = radianEdges[0] + deltaRadianEdges * distanceMultiplier;
+
+                if (Math.abs(cumulativeDeltaT) > radianThreshold) {
+                    // Delta angle exceeds minimum, draw an anchor.
+                    anchorRequired = true;
+                }
             }
         }
 
         if (anchorRequired) {
             cumulativeDeltaT = 0;
+            cumulativeAnchorDistance = 0;
         }
 
         minX = Math.min(point[0], minX);
@@ -439,8 +440,8 @@ function locationStreamToBezier(points) {
     return {
         anchors: anchors,
         bounds: locationsToVectorPosition([minX, minY], [maxX, maxY]),
-        origPath: drawOriginalPath ? '<path d="' + origPath.toString() + '" fill="none" stroke="red" stroke-width="' + distanceEdges[0]/2 + '" />' : null,
-        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="' + distanceEdges[0]/2 + '" />'
+        origPath: drawOriginalPath ? '<path d="' + origPath.toString() + '" fill="none" stroke="red" stroke-width="0.00005" />' : null,
+        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="0.00005" />'
     };
 }
 
