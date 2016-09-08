@@ -5,7 +5,7 @@ var workerCenterLocation = [-122.441642 + (0.025 * Math.random()), 37.754688 + (
 var i, targetIdLen = 24, targetCount = 500;
 var targetIds = new Array(targetCount);
 for (i = 0; i < targetCount; i++) {
-    targetIds[i] = Array(targetIdLen+1).join((((i+1)/(targetCount*7)).toString(36)+'00000000000000000').slice(2, 18)).slice(0, targetIdLen)
+    targetIds[i] = Array(targetIdLen+1).join(((((i+1)*3)/(targetCount*7)).toString(36)+'00000000000000000').slice(2, 18)).slice(0, targetIdLen)
 }
 
 var decameter = 0.0001;
