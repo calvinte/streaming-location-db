@@ -136,11 +136,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
                 stream.writtenBounds = bounds;
             }
 
-            if (exports.autoComputeSvg || i < activeLineStyles.length - 1) {
-                stream.writeStream.write(pathDetails.path);
-            } else {
-                stream.writeStream.end(pathDetails.path + svgCloseStr);
-            }
+            stream.writeStream.write(pathDetails.path);
             stream.fileSize += pathDetails.path.length;
 
             if (!locationPg.pg || locationPg.pgStatus !== locationPg.pgConnectionStatusList[3]) {
@@ -155,7 +151,20 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         targetId = stream, lastAnchor = null;
     }
 
-    locationPg.insertAnchors(targetPathAnchors, cb);
+    if (!exports.autoComputeSvg && i < activeLineStyles.length - 1) {
+        locationPg.insertAnchors(targetPathAnchors, function(err, res) {
+            for (targetId in activeStreams) {
+                activeStreams[targetId].writeStream.end();
+            }
+            if (err) {
+                cb(err);
+            } else {
+                cb(null);
+            }
+        });
+    } else {
+        locationPg.insertAnchors(targetPathAnchors, cb);
+    }
 };
 
 var activeStreamComputationInProgress = false;

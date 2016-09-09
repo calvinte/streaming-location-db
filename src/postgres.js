@@ -170,10 +170,10 @@ exports.updateAnchorsFilename = function updateAnchorsFilename(filename, targetI
     exports.pg.query(format(`
         UPDATE pathref SET filename = '%s' WHERE target = '%s' AND filename = '%s'
     `, filename, targetId, locationFs.activeStreamFilename), function(err, res) {
-        if (!err) {
+        if (res && res.rowCount > 0 && !err) {
             cb(null, res);
         } else {
-            cb(err);
+            cb(err || 'NO ROWS?');
         }
     });
 };
