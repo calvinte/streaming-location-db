@@ -288,7 +288,6 @@ function handleWriteStreamUnpipe(src) {
 
 var svgDecimalPrecision = 5;
 function locationsToVectorPosition() {
-    var _args = arguments, location;
     var i, j, locations = Array(arguments.length * 2);
 
     for (i = j = 0; i < arguments.length; i++) {
@@ -470,8 +469,8 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
         }
 
         centersDistance = getSqDist(avgCenter, geoCenter);
-        centersTangent = 0.5 * (anchorTangent - Math.atan2(anchor[1] - geoCenter[1], anchor[0] - geoCenter[0]));
-        handleDistance = Math.min(Math.sqrt(centersDistance * boundsRatio), Math.sqrt(cumulativeAnchorDistance));
+        centersTangent = 0.5 * (anchorTangent/2 + Math.atan2(anchor[1] - geoCenter[1], anchor[0] - geoCenter[0]));
+        handleDistance = Math.sqrt(Math.min(centersDistance * boundsRatio, cumulativeAnchorDistance/2));
         return [
             avgCenter[0] + handleDistance * Math.sin(centersTangent),
             avgCenter[1] + handleDistance * Math.cos(centersTangent)
@@ -479,9 +478,6 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
     } else {
         return avgCenter;
     }
-
-
-
 }
 
 function rotate(cx, cy, x, y, radians) {

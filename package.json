@@ -15,8 +15,8 @@
   },
   "devDependencies": {
     "chai": "^3.5.0",
+    "jslint": "^0.10.3",
     "mocha": "3.0.2"
   },
   "engine": "node = 4.5.0"
 }
-
