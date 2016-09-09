@@ -15,7 +15,7 @@ var psqlLogger = require('./logger').Logger('psql');
 // CREATE EXTENSION "uuid-ossp";
 //
 // again later..
-// SELECT filename, target, array_length(locations, 1) FROM pathref;
+// SELECT filename, target, lineStyle, array_length(locations, 1), FROM pathref;
 //
 // fresh state:
 // rm -rf .svg_db
@@ -71,7 +71,7 @@ exports.connectPsql = function connectPsql(cb) {
                     filename CHARACTER(17) NOT NULL,
                     target CHARACTER(24) NOT NULL,
                     locations UUID[],
-                    pathKey CHARACTER(24) NOT NULL
+                    lineStyle CHARACTER(24) NOT NULL
                 );
                 CREATE INDEX svg_path ON pathref (target, filename);
             `, function(err, res) {
@@ -97,7 +97,7 @@ exports.connectPsql = function connectPsql(cb) {
 };
 
 exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
-    var row, i, j, targetId, pathKey;
+    var row, i, j, targetId, lineStyle;
     var rows = _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true);
     if (!rows.length) {
         cb(null);
@@ -116,10 +116,10 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
 
             j = -1;
             for (targetId in targetPathAnchors) {
-                for (pathKey in targetPathAnchors[targetId]) {
-                    for (i in targetPathAnchors[targetId][pathKey]) {
+                for (lineStyle in targetPathAnchors[targetId]) {
+                    for (i in targetPathAnchors[targetId][lineStyle]) {
                         row = res.rows[++j];
-                        targetPathAnchors[targetId][pathKey][i]._id = row['_id']
+                        targetPathAnchors[targetId][lineStyle][i]._id = row['_id']
                     }
                 }
             }
@@ -127,14 +127,14 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
             exports.pg.query(format(`
                 INSERT INTO pathref(${_.keys(locationMgr.pathref.prototype).join(',')}) VALUES %L
             `, _.flatten(_.map(targetPathAnchors, function(paths, targetId) {
-                return _.map(paths, function(anchors, pathKey) {
+                return _.map(paths, function(anchors, lineStyle) {
                     return [
                         locationFs.activeStreamFilename,
                         '{' + _.map(anchors, function(anchor) {
                             return anchor._id;
                         }).join(',') + '}',
                         targetId,
-                        pathKey
+                        lineStyle
                     ];
                 })}), true)), function(err, res) {
 
@@ -149,7 +149,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
     });
 
     function anchorsToInsertArr(paths, targetId) {
-        return _.flatten(_.map(paths, function(anchors, pathKey) {
+        return _.flatten(_.map(paths, function(anchors, lineStyle) {
             return _.map(anchors, function(location) {
                 var coordString = location.coordinates.join(' ');
                 if (location.coordinates.length === 2) {

@@ -66,7 +66,7 @@ exports.pathref.prototype = {
     'filename': null,
     'locations': null,
     'target': null,
-    'pathKey': null,
+    'lineStyle': null,
 };
 
 var readyListeners = [];
@@ -108,12 +108,12 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         _.each(activePathStyles, function(pathStyle, i) {
             var pathDetails, width, height, lastAnchor, bounds;
             var pathFn = pathStyle[0];
-            var pathKey = pathStyle[1];
+            var lineStyle = pathStyle[1];
             var pathColor = pathStyle[2];
 
             pathDetails = pathFn(stream, pathColor);
 
-            targetPathAnchors[targetId][pathKey] = pathDetails.anchors;
+            targetPathAnchors[targetId][lineStyle] = pathDetails.anchors;
 
             bounds = _.clone(pathDetails.bounds);
             if (stream.bounds) {
