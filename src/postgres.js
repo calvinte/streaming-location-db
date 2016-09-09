@@ -112,7 +112,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
             cb(err);
             return;
         } else {
-            psqlLogger('insert', 'success' + ':' + res.rowCount);
+            psqlLogger('insert', 'locations' + ':' + res.rowCount);
 
             j = -1;
             for (targetId in targetPathAnchors) {
@@ -142,6 +142,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
                     psqlLogger('insert', 'err');
                     cb(err);
                 } else {
+                    psqlLogger('insert', 'pathref' + ':' + res.rowCount);
                     cb(null, res);
                 }
             });

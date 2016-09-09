@@ -71,6 +71,7 @@ describe('Streaming Locations -> SVG', function() {
                     }
                 }), function(err) {
                     assert.equal(null, err);
+                    client.close();
 
                     setTimeout(function() {
                         done();

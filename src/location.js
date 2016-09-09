@@ -26,10 +26,15 @@ exports.stream.start();
 // @TODO exports.stream.offClientClose
 exports.stream.onClientClose(function(clientSocketIndex) {
     var targetId;
+
+    if (!exports.autoComputeSvg) {
+        return;
+    }
+
     for (targetId in clientTargetMap[clientSocketIndex]) {
         if (activeStreams[targetId] && activeStreams[targetId].writeStream) {
-            activeStreams[targetId].writeStream.end(svgCloseStr);
             activeStreams[targetId].fileSize += svgCloseStr.length;
+            activeStreams[targetId].writeStream.end(svgCloseStr);
         }
         LocationMgrLogger('streaming', 'end:' + targetId);
         activeStreams[targetId].push = handleDeadStreamMessage;
@@ -154,8 +159,9 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     if (!exports.autoComputeSvg && i < activeLineStyles.length - 1) {
         locationPg.insertAnchors(targetPathAnchors, function(err, res) {
             for (targetId in activeStreams) {
-                activeStreams[targetId].writeStream.end();
+                activeStreams[targetId].writeStream.end(svgCloseStr);
             }
+
             if (err) {
                 cb(err);
             } else {
@@ -257,10 +263,14 @@ function handleWriteStreamError(event) {
     //LocationMgrLogger('write', 'err');
 };
 
+exports.archiveInProgress = false;
+var streamFinishCount = -1;
 function handleWriteStreamFinish() {
+    var streamFinishIndex = ++streamFinishCount;
     var activeFilename = this.path, newFilename;
     var targetId = new RegExp(locationFS.svgDir + '/(.+?)/', 'g').exec(activeFilename)[1];
     var stream = activeStreams[targetId];
+    exports.archiveInProgress = true;
     delete activeStreams[targetId];
 
     if (stream.bounds !== stream.writtenBounds) {
@@ -282,6 +292,10 @@ function handleWriteStreamFinish() {
             }
 
             locationPg.updateAnchorsFilename(newFilename, targetId, function(err, res) {
+                if (streamFinishCount === streamFinishIndex) {
+                    exports.archiveInProgress = false;
+                }
+
                 if (err) {
                     LocationMgrLogger('archive', 'pg err');
                 } else {
