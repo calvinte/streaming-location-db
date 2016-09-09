@@ -17,5 +17,9 @@ exports.locationsToVectorPosition = function locationsToVectorPosition() {
     }
 
     return locations;
-}
+};
+
+exports.pathToSvg = function pathToSvg(path, color) {
+    return '<path d="' + path.toString() + '" fill="none" stroke="' + color + '" stroke-width="0.00005" />';
+};
 

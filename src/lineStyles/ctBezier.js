@@ -116,7 +116,7 @@ module.exports = function ctBezier(points, color) {
     return {
         anchors: anchors,
         bounds: lineUtil.locationsToVectorPosition([minX, minY], [maxX, maxY]),
-        path: '<path d="' + path.toString() + '" fill="none" stroke="' + color + '" stroke-width="0.00005" />'
+        path: lineUtil.pathToSvg(path, color)
     };
 }
 
