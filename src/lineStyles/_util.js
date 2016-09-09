@@ -1,3 +1,4 @@
+exports.lineStylesLogger = require('../logger').Logger('lineStyles');
 exports.svgDecimalPrecision = 5;
 exports.locationsToVectorPosition = function locationsToVectorPosition() {
     var i, j, locations = Array(arguments.length * 2);
@@ -10,7 +11,7 @@ exports.locationsToVectorPosition = function locationsToVectorPosition() {
             locations[j++] = (arguments[i][0]).toFixed(exports.svgDecimalPrecision);
             locations[j++] = (arguments[i][1]).toFixed(exports.svgDecimalPrecision);
         } else {
-            LocationMgrLogger('locationsToVectorPosition', 'err, unexpected input')
+            exports.lineStylesLogger('locationsToVectorPosition', 'err, unexpected input')
             locations[j++] = 0;
             locations[j++] = 0;
         }

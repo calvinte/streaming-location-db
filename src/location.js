@@ -86,6 +86,7 @@ var svgParts = ['<svg version="1.1" baseProfile="full" ', 'viewBox="', null, ' '
 var activeLineStyles = [
     [lineStyles.raw, 'raw', 'red'],
     [lineStyles.ctBezier, 'ctBezier', 'black'],
+    [lineStyles.douglasPeucker, 'douglasPeucker', 'green'],
 ];
 
 exports.autoComputeSvg = true;
