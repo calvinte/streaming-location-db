@@ -68,9 +68,10 @@ exports.connectPsql = function connectPsql(cb) {
                 );
                 CREATE TABLE pathref(
                     _id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    filename CHARACTER(17),
-                    target CHARACTER(24),
-                    locations UUID[]
+                    filename CHARACTER(17) NOT NULL,
+                    target CHARACTER(24) NOT NULL,
+                    locations UUID[],
+                    pathKey CHARACTER(24) NOT NULL
                 );
                 CREATE INDEX svg_path ON pathref (target, filename);
             `, function(err, res) {
@@ -96,7 +97,7 @@ exports.connectPsql = function connectPsql(cb) {
 };
 
 exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
-    var row, i, j, targetId;
+    var row, i, j, targetId, pathKey;
     var rows = _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true);
     if (!rows.length) {
         cb(null);
@@ -115,23 +116,27 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
 
             j = -1;
             for (targetId in targetPathAnchors) {
-                for (i in targetPathAnchors[targetId]) {
-                    row = res.rows[++j];
-                    targetPathAnchors[targetId][i]._id = row['_id']
+                for (pathKey in targetPathAnchors[targetId]) {
+                    for (i in targetPathAnchors[targetId][pathKey]) {
+                        row = res.rows[++j];
+                        targetPathAnchors[targetId][pathKey][i]._id = row['_id']
+                    }
                 }
             }
 
             exports.pg.query(format(`
                 INSERT INTO pathref(${_.keys(locationMgr.pathref.prototype).join(',')}) VALUES %L
-            `, _.map(targetPathAnchors, function(anchors, targetId) {
-                return [
-                    locationFs.activeStreamFilename,
-                    '{' + _.map(anchors, function(anchor) {
-                        return anchor._id;
-                    }).join(',') + '}',
-                    targetId
-                ];
-            })), function(err, res) {
+            `, _.flatten(_.map(targetPathAnchors, function(paths, targetId) {
+                return _.map(paths, function(anchors, pathKey) {
+                    return [
+                        locationFs.activeStreamFilename,
+                        '{' + _.map(anchors, function(anchor) {
+                            return anchor._id;
+                        }).join(',') + '}',
+                        targetId,
+                        pathKey
+                    ];
+                })}), true)), function(err, res) {
 
                 if (err) {
                     psqlLogger('insert', 'err');
@@ -143,17 +148,21 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
         }
     });
 
-    function anchorsToInsertArr(anchors, targetId) {
-        return _.map(anchors, function(location) {
-            var coordString = location.coordinates.join(' ');
-            if (location.coordinates.length === 2) {
-                coordString += ' -999';
-            }
+    function anchorsToInsertArr(paths, targetId) {
+        return _.flatten(_.map(paths, function(anchors, pathKey) {
+            return _.map(anchors, function(location) {
+                var coordString = location.coordinates.join(' ');
+                if (location.coordinates.length === 2) {
+                    coordString += ' -999';
+                }
 
-            location = _.extend(locationMgr.location.prototype, location);
-            location.coordinates = `POINTZ(${coordString})`;
-            return _.toArray(location);
-        });
+                location = _.extend(locationMgr.location.prototype, location);
+                location.coordinates = `POINTZ(${coordString})`;
+                return _.map(locationMgr.location.prototype, function(n_ll, key) {
+                    return location[key];
+                });
+            });
+        }), true);
     }
 };
 

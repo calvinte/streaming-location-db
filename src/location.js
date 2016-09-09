@@ -5,7 +5,9 @@ var _ = require('underscore');
 
 var locationPg = require('./postgres');
 var locationFS = require('./filesystem');
+
 var ctBezier = require('./lineTypes/ctBezier');
+var raw = require('./lineTypes/raw');
 
 var LocationMgrLogger = require('./logger').Logger('location');
 var SocketHelper = require('socket-helper');
@@ -64,6 +66,7 @@ exports.pathref.prototype = {
     'filename': null,
     'locations': null,
     'target': null,
+    'pathKey': null,
 };
 
 var readyListeners = [];
@@ -81,10 +84,15 @@ var computeActiveStreamSvgCount = -1;
 var svgCloseStr = '</svg>';
 var svgParts = ['<svg version="1.1" baseProfile="full" ', 'viewBox="', null, ' ', null, ' ', null, ' ', null, '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">', svgCloseStr];
 var locationStreamToBezier = ctBezier;
+var activePathStyles = [
+    [raw, 'raw', 'red'],
+    [ctBezier, 'ctBezier', 'black'],
+];
+
 exports.autoComputeSvg = true;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
     var targetPathAnchors = {};
-    var targetId, stream, pathDetails, width, height, lastAnchor, bounds;
+    var targetId, stream, lastAnchor;
     var computeActiveStreamSvgIdx = ++computeActiveStreamSvgCount;
     var writeStr, writeStatus = true;
 
@@ -95,52 +103,56 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
             continue;
         }
 
+        targetPathAnchors[targetId] = {};
         lastAnchor = _.clone(_.last(stream));
-        pathDetails = locationStreamToBezier(stream);
-        targetPathAnchors[targetId] = pathDetails.anchors;
+        _.each(activePathStyles, function(pathStyle, i) {
+            var pathDetails, width, height, lastAnchor, bounds;
+            var pathFn = pathStyle[0];
+            var pathKey = pathStyle[1];
+            var pathColor = pathStyle[2];
 
-        bounds = _.clone(pathDetails.bounds);
-        if (stream.bounds) {
-            bounds[0] = Math.min(bounds[0], stream.bounds[0]);
-            bounds[1] = Math.min(bounds[1], stream.bounds[1]);
-            bounds[2] = Math.max(bounds[2], stream.bounds[2]);
-            bounds[3] = Math.max(bounds[3], stream.bounds[3]);
-        }
-        stream.bounds = bounds;
+            pathDetails = pathFn(stream, pathColor);
 
-        if (stream.fileSize === 0) {
-            writeStatus = false;
-            stream.viewBox = computeViewBox(bounds);
-            writeStr = svgParts[0] + stream.viewBox + svgParts[9];
-            while (!writeStatus) {
-                writeStatus = stream.writeStream.write(writeStr);
+            targetPathAnchors[targetId][pathKey] = pathDetails.anchors;
+
+            bounds = _.clone(pathDetails.bounds);
+            if (stream.bounds) {
+                bounds[0] = Math.min(bounds[0], stream.bounds[0]);
+                bounds[1] = Math.min(bounds[1], stream.bounds[1]);
+                bounds[2] = Math.max(bounds[2], stream.bounds[2]);
+                bounds[3] = Math.max(bounds[3], stream.bounds[3]);
+            }
+            stream.bounds = bounds;
+
+            if (stream.fileSize === 0) {
+                writeStatus = false;
+                stream.viewBox = computeViewBox(bounds);
+                writeStr = svgParts[0] + stream.viewBox + svgParts[9];
+                while (!writeStatus) {
+                    writeStatus = stream.writeStream.write(writeStr);
+                }
+
+                stream.fileSize += writeStr.length;
+                stream.writtenBounds = bounds;
             }
 
-            stream.fileSize += writeStr.length;
-            stream.writtenBounds = bounds;
-        }
+            if (exports.autoComputeSvg || i < activePathStyles.length - 1) {
+                stream.writeStream.write(pathDetails.path);
+            } else {
+                stream.writeStream.end(pathDetails.path + svgCloseStr);
+            }
+            stream.fileSize += pathDetails.path.length;
 
-        if (pathDetails.origPath) {
-            stream.writeStream.write(pathDetails.origPath);
-            stream.fileSize += pathDetails.origPath.length;
-        }
+            if (!locationPg.pg || locationPg.pgStatus !== locationPg.pgConnectionStatusList[3]) {
+                LocationMgrLogger('psql', 'err');
+                return;
+            }
 
-        if (exports.autoComputeSvg) {
-            stream.writeStream.write(pathDetails.path);
-        } else {
-            stream.writeStream.end(pathDetails.path + svgCloseStr);
-        }
-        stream.fileSize += pathDetails.path.length;
-
-        if (!locationPg.pg || locationPg.pgStatus !== locationPg.pgConnectionStatusList[3]) {
-            LocationMgrLogger('psql', 'err');
-            return;
-        }
-
-        stream.lastAnchor = lastAnchor;
+            stream.lastAnchor = lastAnchor;
+        });
         activeStreams[targetId].splice(0, stream.length);
 
-        targetId = stream = pathDetails = width = height, lastAnchor = null;
+        targetId = stream, lastAnchor = null;
     }
 
     locationPg.insertAnchors(targetPathAnchors, cb);

@@ -1,8 +1,9 @@
 var d3 = require('d3');
 var geolib = require('geolib');
 var _ = require('underscore');
+var lineUtil = require('./_util');
 
-module.exports = function ctBezier(points) {
+module.exports = function ctBezier(points, color) {
     var i, point = null, skippedPoints = null;
 
     var anchorRequired = false;
@@ -17,7 +18,6 @@ module.exports = function ctBezier(points) {
 
     var prevAnchor, prevPoint, anchors;
     var path = d3.path();
-    var origPath = null;
 
     if (points.lastAnchor) {
         prevAnchor = points.lastAnchor.coordinates;
@@ -27,12 +27,7 @@ module.exports = function ctBezier(points) {
         anchors = [points[0]];
     }
 
-    path.moveTo.apply(path, locationsToVectorPosition(prevAnchor));
-
-    if (drawOriginalPath) {
-        origPath = d3.path();
-        origPath.moveTo.apply(origPath, locationsToVectorPosition(prevAnchor));
-    }
+    path.moveTo.apply(path, lineUtil.locationsToVectorPosition(prevAnchor));
 
     minX = maxX = prevAnchor[0];
     minY = maxY = prevAnchor[1];
@@ -68,23 +63,19 @@ module.exports = function ctBezier(points) {
         minY = Math.min(point[1], minY);
         maxY = Math.max(point[1], maxY);
 
-        if (drawOriginalPath) {
-            origPath.lineTo.apply(origPath, locationsToVectorPosition(point));
-        }
-
         if (skippedPoints === null && anchorRequired) {
             // Draw new point, straight line
             anchors.push(points[i]);
             prevAnchor = point;
 
-            path.lineTo.apply(path, locationsToVectorPosition(point));
+            path.lineTo.apply(path, lineUtil.locationsToVectorPosition(point));
         } else if (anchorRequired) {
             if (skippedPoints.length === 1) {
                 // qudratic curve to makes nice curves, but they dont serve to
                 // reduce file size..
-                //path.quadraticCurveTo.apply(path, locationsToVectorPosition(skippedPoints[0], point));
-                path.lineTo.apply(path, locationsToVectorPosition(skippedPoints[0]));
-                path.lineTo.apply(path, locationsToVectorPosition(point));
+                //path.quadraticCurveTo.apply(path, lineUtil.locationsToVectorPosition(skippedPoints[0], point));
+                path.lineTo.apply(path, lineUtil.locationsToVectorPosition(skippedPoints[0]));
+                path.lineTo.apply(path, lineUtil.locationsToVectorPosition(point));
             } else {
                 if (spliceBiasCeil) {
                     spliceIdx = Math.ceil(skippedPoints.length / 2);
@@ -97,7 +88,7 @@ module.exports = function ctBezier(points) {
                 handles[0] = computeHandle(skippedPoints.slice(0, spliceIdx), anchorTangent, prevAnchor, cumulativeAnchorDistance);
                 handles[1] = computeHandle(skippedPoints.slice(spliceIdx, skippedPoints.length), anchorTangent, point, cumulativeAnchorDistance);
 
-                path.bezierCurveTo.apply(path, locationsToVectorPosition(handles[0], handles[1], point));
+                path.bezierCurveTo.apply(path, lineUtil.locationsToVectorPosition(handles[0], handles[1], point));
             }
 
             // Draw new point, average skipped points as bezier
@@ -124,31 +115,9 @@ module.exports = function ctBezier(points) {
 
     return {
         anchors: anchors,
-        bounds: locationsToVectorPosition([minX, minY], [maxX, maxY]),
-        origPath: drawOriginalPath ? '<path d="' + origPath.toString() + '" fill="none" stroke="red" stroke-width="0.00005" />' : null,
-        path: '<path d="' + path.toString() + '" fill="none" stroke="black" stroke-width="0.00005" />'
+        bounds: lineUtil.locationsToVectorPosition([minX, minY], [maxX, maxY]),
+        path: '<path d="' + path.toString() + '" fill="none" stroke="' + color + '" stroke-width="0.00005" />'
     };
-}
-
-var svgDecimalPrecision = 5;
-function locationsToVectorPosition() {
-    var i, j, locations = Array(arguments.length * 2);
-
-    for (i = j = 0; i < arguments.length; i++) {
-        if (arguments[i].longitude && arguments[i].latitude) {
-            locations[j++] = parseFloat(arguments[i].longitude).toFixed(svgDecimalPrecision);
-            locations[j++] = parseFloat(arguments[i].latitude).toFixed(svgDecimalPrecision);
-        } else if (typeof arguments[i][0] === 'number' && typeof arguments[i][1] === 'number') {
-            locations[j++] = (arguments[i][0]).toFixed(svgDecimalPrecision);
-            locations[j++] = (arguments[i][1]).toFixed(svgDecimalPrecision);
-        } else {
-            LocationMgrLogger('locationsToVectorPosition', 'err, unexpected input')
-            locations[j++] = 0;
-            locations[j++] = 0;
-        }
-    }
-
-    return locations;
 }
 
 var radianEdges = [
@@ -161,8 +130,6 @@ var sqDistanceEdges = [
     Math.pow(0.0001, 2), // ~11.06 meters
     Math.pow(0.01, 2), // ~1105.74 meters
 ];
-
-var drawOriginalPath = true;
 
 function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnchorDistance) {
     var avgCenter, geoCenter;
