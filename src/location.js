@@ -215,15 +215,20 @@ function handleIncomingMessage(message, cb) {
     if (typeof targetId === 'string') {
         clientTargetMap[message.clientSocketIndex] = clientTargetMap[message.clientSocketIndex] || {};
         clientTargetMap[message.clientSocketIndex][targetId] = true;
+        message = null;
+
         exports.targetLastSeen[targetId] = new Date();
 
         if (activeStreams[targetId] instanceof Array) {
             activeStreams[targetId].push(parsedMessage.location);
+            targetId = parsedMessage = null;
             throttledComputeActiveStreamSvg();
             cb(null);
         } else {
             LocationMgrLogger('streaming', 'start:' + targetId);
-            activeStreams[targetId] = [];
+            activeStreams[targetId] = [parsedMessage.location];
+            parsedMessage = null;
+
             locationFS.getTargetWriteStream(targetId, function(err, details) {
                 if (err) {
                     LocationMgrLogger('value', 'err');
@@ -241,11 +246,13 @@ function handleIncomingMessage(message, cb) {
                     activeStreams[targetId].writeStream.on('finish', handleWriteStreamFinish);
                     activeStreams[targetId].writeStream.on('pupe', handleWriteStreamPipe);
                     activeStreams[targetId].writeStream.on('unpipe', handleWriteStreamUnpipe);
+                    targetId = null;
                     cb(null);
                 }
             });
         }
     } else {
+        targetId = message = parsedMessage = null;
         LocationMgrLogger('value', 'err');
         cb('target id not found');
     }
