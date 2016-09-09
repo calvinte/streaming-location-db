@@ -1,13 +1,13 @@
 'use strict'
 
 var async = require('async');
+var requireDir = require('require-dir');
 var _ = require('underscore');
 
 var locationPg = require('./postgres');
 var locationFS = require('./filesystem');
 
-var ctBezier = require('./lineTypes/ctBezier');
-var raw = require('./lineTypes/raw');
+var lineStyles = requireDir('./lineStyles');
 
 var LocationMgrLogger = require('./logger').Logger('location');
 var SocketHelper = require('socket-helper');
@@ -83,10 +83,9 @@ var computeActiveStreamSvgCount = -1;
 
 var svgCloseStr = '</svg>';
 var svgParts = ['<svg version="1.1" baseProfile="full" ', 'viewBox="', null, ' ', null, ' ', null, ' ', null, '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">', svgCloseStr];
-var locationStreamToBezier = ctBezier;
-var activePathStyles = [
-    [raw, 'raw', 'red'],
-    [ctBezier, 'ctBezier', 'black'],
+var activeLineStyles = [
+    [lineStyles.raw, 'raw', 'red'],
+    [lineStyles.ctBezier, 'ctBezier', 'black'],
 ];
 
 exports.autoComputeSvg = true;
@@ -105,7 +104,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
 
         targetPathAnchors[targetId] = {};
         lastAnchor = _.clone(_.last(stream));
-        _.each(activePathStyles, function(pathStyle, i) {
+        _.each(activeLineStyles, function(pathStyle, i) {
             var pathDetails, width, height, lastAnchor, bounds;
             var pathFn = pathStyle[0];
             var lineStyle = pathStyle[1];
@@ -136,7 +135,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
                 stream.writtenBounds = bounds;
             }
 
-            if (exports.autoComputeSvg || i < activePathStyles.length - 1) {
+            if (exports.autoComputeSvg || i < activeLineStyles.length - 1) {
                 stream.writeStream.write(pathDetails.path);
             } else {
                 stream.writeStream.end(pathDetails.path + svgCloseStr);
