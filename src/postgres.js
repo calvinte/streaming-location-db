@@ -108,6 +108,11 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
         INSERT INTO locations(${_.keys(locationMgr.location.prototype).join(',')}) VALUES %L RETURNING _id
     `, rows), function (err, res) {
         if (err) {
+            // @TODO: duplicate key value violates unique constraint "locations_pkey"
+            // Happens when under high load. Try:
+            // node server.js &;
+            // ... when ready ...
+            // node demoClient.js
             psqlLogger('insert', 'err');
             cb(err);
             return;
