@@ -18,8 +18,8 @@ function distanceFromLineToPoint(line, point) {
     );
 }
 
-function computeHandle(skippedPointsGroup, anchorTangent, anchor) {
-    var avgCenter, geoCenter, centersTangent, centersDistance, handleDistance, bounds, boundsRatio, ret;
+function computeHandle(skippedPointsGroup, anchorTangent, anchor, maxDistance) {
+    var avgCenter, geoCenter, centersTangent, handleDistance, bounds, boundsRatio, ret;
 
     avgCenter = lineUtil.geolibToJson(geolib.getCenter(skippedPointsGroup));
     geoCenter = lineUtil.geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
@@ -28,18 +28,15 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor) {
         return lineUtil.rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
     });
 
-    centersDistance = lineUtil.getSqDist(avgCenter, geoCenter);
-    if (centersDistance) {
-        bounds = geolib.getBounds(skippedPointsGroup);
-        boundsRatio = (bounds.maxLng - bounds.minLng) / (bounds.maxLat - bounds.minLat);
-    }
+    bounds = geolib.getBounds(skippedPointsGroup);
+    boundsRatio = (bounds.maxLng - bounds.minLng) / (bounds.maxLat - bounds.minLat);
 
-    if (centersDistance && boundsRatio) {
+    if (boundsRatio) {
         if (boundsRatio < 1) {
             boundsRatio = 1 / boundsRatio;
         }
         centersTangent = anchorTangent + (Math.atan2(avgCenter[1] - geoCenter[1], avgCenter[0] - geoCenter[0]));
-        handleDistance = Math.sqrt(centersDistance * Math.log(boundsRatio));
+        handleDistance = Math.log(boundsRatio) * maxDistance;
         ret = [
             avgCenter[0] + handleDistance * Math.sin(centersTangent),
             avgCenter[1] + handleDistance * Math.cos(centersTangent)
@@ -97,8 +94,8 @@ function douglasPeucker(points) {
 
         returnPoints = [{
             point: points[points.length - 1],
-            handle1: computeHandle(_.pluck(points.slice(0, halfIdx), 'coordinates'), anchorTangent, lastPoint),
-            handle2: computeHandle(_.pluck(points.slice(halfIdx, points.length), 'coordinates'), anchorTangent, point)
+            handle1: computeHandle(_.pluck(points.slice(0, halfIdx), 'coordinates'), anchorTangent, lastPoint, maxDistance),
+            handle2: computeHandle(_.pluck(points.slice(halfIdx, points.length), 'coordinates'), anchorTangent, point, maxDistance)
         }];
     }
 
