@@ -22,7 +22,7 @@ client.on('open', function() {
     targetIds.forEach(function(targetId, i) {
         var offsetRad = Math.PI * 2 * (i/targetCount);
         var radius = (i/targetCount) * decameter * 50 + decameter * 200; // 2250~2750 meters
-        var distancePerSecond = (i/targetCount) * decameter / 2 + decameter * 10; // 40~60 km/h
+        var distancePerSecond = (i/targetCount) * decameter / 2 + decameter; // 40~60 km/h
         setInterval(function() {
             var radiusWiggly = radius + Math.random() * decameter / 10; // radius + < 1m
             var distance = (new Date().getTime() - startTime) / 1000 * distancePerSecond;
