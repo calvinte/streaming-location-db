@@ -6,7 +6,6 @@ var _ = require('underscore');
 
 var locationPg = require('./postgres');
 var locationFS = require('./filesystem');
-
 var lineStyles = requireDir('./lineStyles');
 
 var locationMgrLogger = require('./logger').Logger('location');
@@ -126,10 +125,6 @@ var throttledComputeActiveStreamSvg = _.throttle(function () {
         activeStreamComputationInProgress = false;
     });
 }, Math.pow(2, 14));
-
-function handleDeadStreamMessage() {
-    locationMgrLogger('phantom stream', 'err');
-}
 
 exports.archiveInProgress = false;
 var streamFinishCount = -1;
@@ -271,12 +266,17 @@ function processQueue(err) {
 }
 
 locationPg.connectPsql(processQueue);
-
 locationFS.setupSvgFs(processQueue);
+
+function handleDeadStreamMessage() {
+    locationMgrLogger('phantom stream', 'err');
+}
 
 exports.stream = new StreamMgr.Stream();
 exports.stream.start();
-
+exports.stream.onValue(function (message) {
+    exports.queue.push(message);
+});
 exports.stream.onClientClose(function (clientSocketIndex) {
     var targetId;
 
@@ -295,45 +295,4 @@ exports.stream.onClientClose(function (clientSocketIndex) {
         }
     }
 });
-
-exports.stream.onValue(function (message) {
-    exports.queue.push(message);
-});
-
-exports.location = function (options) {
-    this.accuracy = options.accuracy || exports.location.prototype.accuracy;
-    this.heading = options.heading || exports.location.prototype.heading;
-    this.coordinates = options.coordinates || exports.location.prototype.coordinates;
-    this.speed = options.speed || exports.location.prototype.speed;
-    this.time = options.time || exports.location.prototype.time;
-};
-
-exports.location.prototype = {
-    'accuracy': null,
-    'heading': null,
-    'coordinates': null,
-    'speed': null,
-    'time': null,
-};
-
-exports.pathref = function (options) {
-    this.file = options.file || exports.pathref.prototype.file;
-    this.locations = options.locations || exports.pathref.prototype.locations;
-    this.target = options.target || exports.pathref.prototype.target;
-};
-
-exports.pathref.prototype = {
-    'filename': null,
-    'locations': null,
-    'target': null,
-    'lineStyle': null,
-};
-
-function locationToLatLng(location) {
-    if (!(location && location.coordinates && location.coordinates.length > 1)) {
-        return null;
-    }
-
-    return location.coordinates.slice(0, 2);
-}
 

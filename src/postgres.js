@@ -6,6 +6,7 @@ var pg = require('pg').native;
 var _ = require('underscore');
 
 var locationMgr = require('./location');
+var model = require('./model');
 var locationFs = require('./filesystem');
 var psqlLogger = require('./logger').Logger('psql');
 
@@ -107,9 +108,9 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
                     coordString += ' -999';
                 }
 
-                location = _.extend(locationMgr.location.prototype, location);
+                location = _.extend(model.location.prototype, location);
                 location.coordinates = `POINTZ(${coordString})`;
-                return _.map(locationMgr.location.prototype, function (n_ll, key) {
+                return _.map(model.location.prototype, function (n_ll, key) {
                     return location[key];
                 });
             });
@@ -123,7 +124,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
     }
 
     exports.pg.query(format(`
-        INSERT INTO locations(${_.keys(locationMgr.location.prototype).join(',')}) VALUES %L RETURNING _id
+        INSERT INTO locations(${_.keys(model.location.prototype).join(',')}) VALUES %L RETURNING _id
     `, rows), function (err, res) {
         if (err) {
             // @TODO: duplicate key value violates unique constraint "locations_pkey"
@@ -147,7 +148,7 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
             }
 
             exports.pg.query(format(`
-                INSERT INTO pathref(${_.keys(locationMgr.pathref.prototype).join(',')}) VALUES %L
+                INSERT INTO pathref(${_.keys(model.pathref.prototype).join(',')}) VALUES %L
             `, _.flatten(_.map(targetPathAnchors, function (paths, targetId) {
                 return _.map(paths, function (anchors, lineStyle) {
                     return [

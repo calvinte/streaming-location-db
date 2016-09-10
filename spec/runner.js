@@ -5,6 +5,7 @@ var WebSocket = require('ws');
 
 var SocketHelper = require('socket-helper');
 var LocationMgr = require('../src/location');
+var model = require('../src/model');
 var specLocations= require('./locations');
 var Socket = SocketHelper.Socket;
 var Stream = SocketHelper.Stream;
@@ -47,7 +48,7 @@ describe('Streaming Locations -> SVG', function() {
                     return function(cb) {
                         async.series(_.map(locations, function(coordinates) {
                             return function(cb) {
-                                var location = new LocationMgr.location({
+                                var location = new model.location({
                                     coordinates: coordinates,
                                     time: new Date()
                                 });
