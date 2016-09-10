@@ -39,7 +39,7 @@ exports.setupSvgFs = function setupSvgFs(cb) {
 exports.createActiveStream = function createActiveStream(file, fd, fileSize) {
     var writer = fs.createWriteStream(file, {fd: fd, start: Math.max(0, fileSize)});
     return writer;
-};
+}
 
 function getTargetPath(targetId) {
     return exports.svgDir + '/' + targetId;

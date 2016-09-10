@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 var async = require('async');
 var format = require('pg-format');
@@ -32,15 +32,16 @@ exports.pgConnectionStatusList = [
 exports.pgStatus = exports.pgConnectionStatusList[0];
 
 exports.connectPsql = function connectPsql(cb) {
+    var config, client;
     exports.pgStatus = exports.pgConnectionStatusList[0];
-    var config = {
+    config = {
         database: 'streaming_location_svg',
         host: 'localhost',
         password: '',
         port: 5432,
         user: '',
     };
-    var client = new pg.Pool(config);
+    client = new pg.Pool(config);
     exports.pgStatus = exports.pgConnectionStatusList[1];
 
     client.query(`
@@ -74,12 +75,11 @@ exports.connectPsql = function connectPsql(cb) {
                     lineStyle CHARACTER(24) NOT NULL
                 );
                 CREATE INDEX svg_path ON pathref (target, filename);
-            `, function (err, res) {
+            `, function (err) {
                 if (err) {
                     psqlLogger('connection', 'err');
                     exports.pgStatus = exports.pgConnectionStatusList[4];
                     cb(err);
-                    return;
                 } else {
                     psqlLogger('create table', 'success');
                     exports.pg = client;
@@ -93,12 +93,30 @@ exports.connectPsql = function connectPsql(cb) {
             exports.pgStatus = exports.pgConnectionStatusList[3];
             cb(null, res);
         }
-    })
+    });
 };
 
 exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
-    var row, i, j, targetId, lineStyle;
-    var rows = _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true);
+   var row, i, j, targetId, lineStyle, rows;
+
+    function anchorsToInsertArr(paths, targetId) {
+        return _.flatten(_.map(paths, function (anchors, lineStyle) {
+            return _.map(anchors, function (location) {
+                var coordString = location.coordinates.join(' ');
+                if (location.coordinates.length === 2) {
+                    coordString += ' -999';
+                }
+
+                location = _.extend(locationMgr.location.prototype, location);
+                location.coordinates = `POINTZ(${coordString})`;
+                return _.map(locationMgr.location.prototype, function (n_ll, key) {
+                    return location[key];
+                });
+            });
+        }), true);
+    }
+
+    rows = _.flatten(_.map(targetPathAnchors, anchorsToInsertArr), true);
     if (!rows.length) {
         cb(null);
         return;
@@ -115,7 +133,6 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
             // node demoClient.js
             psqlLogger('insert', 'err');
             cb(err);
-            return;
         } else {
             psqlLogger('insert', 'locations' + ':' + res.rowCount);
 
@@ -153,23 +170,6 @@ exports.insertAnchors = function insertAnchors(targetPathAnchors, cb) {
             });
         }
     });
-
-    function anchorsToInsertArr(paths, targetId) {
-        return _.flatten(_.map(paths, function (anchors, lineStyle) {
-            return _.map(anchors, function (location) {
-                var coordString = location.coordinates.join(' ');
-                if (location.coordinates.length === 2) {
-                    coordString += ' -999';
-                }
-
-                location = _.extend(locationMgr.location.prototype, location);
-                location.coordinates = `POINTZ(${coordString})`;
-                return _.map(locationMgr.location.prototype, function (n_ll, key) {
-                    return location[key];
-                });
-            });
-        }), true);
-    }
 };
 
 exports.updateAnchorsFilename = function updateAnchorsFilename(filename, targetId, cb) {
