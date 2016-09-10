@@ -49,7 +49,7 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, maxDistance) {
 
 var tolerance = 0.001;
 function douglasPeuckerBezier(points) {
-    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, lastPoint, anchorTangent, halfIdx, sliceHalfBiasCeil = false;
+    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, lastPoint, anchorTangent;
 
     if (points.length <= 2) {
         return [points[0]];
@@ -84,18 +84,11 @@ function douglasPeuckerBezier(points) {
         lastPoint = points[0].coordinates;
         point = points[points.length - 1].coordinates;
         anchorTangent = Math.atan2(point[1] - lastPoint[1], point[0] - lastPoint[0]);
-        if (sliceHalfBiasCeil) {
-            halfIdx = Math.ceil(points.length / 2);
-            sliceHalfBiasCeil = false;
-        } else {
-            halfIdx = Math.floor(points.length / 2);
-            sliceHalfBiasCeil = true;
-        }
 
         returnPoints = [{
             point: points[points.length - 1],
-            handle1: computeHandle(_.pluck(points.slice(0, halfIdx), 'coordinates'), anchorTangent, lastPoint, maxDistance),
-            handle2: computeHandle(_.pluck(points.slice(halfIdx, points.length), 'coordinates'), anchorTangent, point, maxDistance)
+            handle1: computeHandle(_.pluck(points.slice(0, maxDistanceIndex + 1), 'coordinates'), anchorTangent, lastPoint, maxDistance),
+            handle2: computeHandle(_.pluck(points.slice(maxDistanceIndex, points.length), 'coordinates'), anchorTangent, point, maxDistance)
         }];
     }
 
