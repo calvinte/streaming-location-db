@@ -18,13 +18,6 @@ function distanceFromLineToPoint(line, point) {
     );
 }
 
-function controlPointPassthru(start, end, midpoint) {
-    return [
-        midpoint[0] * 2 - (start[0] + end[0]) / 2,
-        midpoint[1] * 2 - (start[1] + end[1]) / 2
-    ];
-}
-
 function computeHandle(anchor, midpoint, maxDistance, direction, convex) {
     var deltaX, deltaY, mag, midX, midY, ret;
 
