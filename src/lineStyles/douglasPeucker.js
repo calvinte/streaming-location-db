@@ -4,23 +4,18 @@ var d3 = require('d3');
 var lineUtil = require('./_util');
 
 // @see https://gist.github.com/adammiller/826148
-var Line = function (p1, p2) {
-    this.p1 = p1;
-    this.p2 = p2;
+function distanceFromLineToPoint(line, point) {
+    var slope, yOffset;
 
-    this.distanceToPoint = function (point) {
-        var slope, yOffset;
+    slope = (line[1][1] - line[0][1]) / (line[1][0] - line[0][0]);
+    yOffset = line[0][1] - (slope * line[0][0]);
 
-        slope = (this.p2[1] - this.p1[1]) / (this.p2[0] - this.p1[0]);
-        yOffset = this.p1[1] - (slope * this.p1[0]);
-
-        return Math.min(
-            Math.abs(point[1] - (slope * point[0]) - yOffset) / Math.sqrt(Math.pow(slope, 2) + 1),
-            Math.sqrt(lineUtil.getSqDist(point, this.p1)),
-            Math.sqrt(lineUtil.getSqDist(point, this.p2))
-        );
-    };
-};
+    return Math.min(
+        Math.abs(point[1] - (slope * point[0]) - yOffset) / Math.sqrt(Math.pow(slope, 2) + 1),
+        Math.sqrt(lineUtil.getSqDist(point, line[0])),
+        Math.sqrt(lineUtil.getSqDist(point, line[1]))
+    );
+}
 
 var tolerance = 0.0001; // ~11.06 meters
 function douglasPeucker(points) {
@@ -32,14 +27,14 @@ function douglasPeucker(points) {
 
     returnPoints = [];
     // make line from start to end 
-    line = new Line(points[0].coordinates, points[points.length - 1].coordinates);
+    line = [points[0].coordinates, points[points.length - 1].coordinates];
 
     // find the largest distance from intermediate poitns to this line
     maxDistance = 0;
     maxDistanceIndex = 0;
     for (i = 1; i <= points.length - 2; i++) {
         point = points[i].coordinates;
-        distance = line.distanceToPoint(point);
+        distance = distanceFromLineToPoint(line, point);
 
         if (distance > maxDistance) {
             maxDistance = distance;
@@ -50,7 +45,6 @@ function douglasPeucker(points) {
     // check if the max distance is greater than our tollerance allows 
     if (maxDistance >= tolerance) {
         point = points[maxDistanceIndex].coordinates;
-        line.distanceToPoint(point, true);
         // include this point in the output 
         returnPoints = returnPoints.concat(douglasPeucker(points.slice(0, maxDistanceIndex + 1)));
         // returnPoints.push(points[maxDistanceIndex]);
@@ -58,7 +52,6 @@ function douglasPeucker(points) {
     } else {
         // ditching this point
         point = points[maxDistanceIndex].coordinates;
-        line.distanceToPoint(point, true);
         returnPoints = [points[0]];
     }
 
