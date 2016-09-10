@@ -40,7 +40,7 @@ module.exports = function ctBezier(points, color) {
         anchorTangent = Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]);
 
         if (!anchorRequired) {
-            sqPointDistance = getSqDist(point, prevPoint);
+            sqPointDistance = lineUtil.getSqDist(point, prevPoint);
             cumulativeAnchorDistance += sqPointDistance;
 
             if (cumulativeAnchorDistance > sqDistanceEdges[0]) {
@@ -152,7 +152,7 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
             boundsRatio = 1/boundsRatio;
         }
 
-        centersDistance = getSqDist(avgCenter, geoCenter);
+        centersDistance = lineUtil.getSqDist(avgCenter, geoCenter);
         centersTangent = 0.5 * (anchorTangent/2 + Math.atan2(anchor[1] - geoCenter[1], anchor[0] - geoCenter[0]));
         handleDistance = Math.sqrt(Math.min(centersDistance * boundsRatio, cumulativeAnchorDistance/2));
         return [
@@ -176,11 +176,4 @@ function rotate(cx, cy, x, y, radians) {
 function geolibToJson(geolibObj) {
     return [geolibObj.longitude, geolibObj.latitude]
 }
-
-function getSqDist(p1, p2) {
-    var dx = p1[0] - p2[0],
-    dy = p1[1] - p2[1];
-
-    return dx * dx + dy * dy;
-};
 
