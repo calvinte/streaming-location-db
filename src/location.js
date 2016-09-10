@@ -37,7 +37,7 @@ function computeViewBox(bounds) {
 
 exports.autoComputeSvg = true;
 exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
-    var targetId, stream, lastAnchor, writeStr, targetPathAnchors = {}, writeStatus = true;
+    var targetId, stream, writeStr, targetPathAnchors = {}, writeStatus = true;
 
     function computePathStyle(pathStyle) {
         var pathDetails, bounds, pathFn = pathStyle[0], lineStyle = pathStyle[1], pathColor = pathStyle[2];
@@ -74,22 +74,19 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
             locationMgrLogger('psql', 'err');
             return;
         }
-
-        stream.lastAnchor = lastAnchor;
-
     }
 
     for (targetId in activeStreams) {
         if (activeStreams.hasOwnProperty(targetId) && activeStreams[targetId].writeStream && activeStreams[targetId].length > 0) {
             stream = activeStreams[targetId];
-
             targetPathAnchors[targetId] = {};
-            lastAnchor = _.clone(_.last(stream));
+
             _.each(activeLineStyles, computePathStyle);
+
+            stream.lastAnchor = _.clone(_.last(stream));
             activeStreams[targetId].splice(0, stream.length);
 
-            targetId = stream = lastAnchor = null;
-
+            targetId = stream = null;
         }
     }
 
