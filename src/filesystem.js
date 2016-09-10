@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 var fs = require('fs');
 var locationMgr = require('./location');
@@ -22,7 +22,6 @@ exports.setupSvgFs = function setupSvgFs(cb) {
                     exports.svgDirStatus = exports.fsSetupStatusList[3];
                     fsLogger('mkdir', 'err');
                     cb(err);
-                    return;
                 } else {
                     exports.svgDirStatus = exports.fsSetupStatusList[2];
                     fsLogger('mkdir', 'success');
@@ -42,23 +41,23 @@ exports.createActiveStream = function createActiveStream(file, fd, fileSize) {
     return writer;
 };
 
-exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
-    var path = getTargetPath(targetId);
-    var file = getTargetActiveFilename(targetId, path);
+function getTargetPath(targetId) {
+    return exports.svgDir + '/' + targetId;
+}
 
-    fs.access(path, fs.F_OK, function (err) {
-        if (err) {
-            fs.mkdir(path, function (err) {
-                if (err) {
-                    cb(err, null);
-                } else {
-                    getFile();
-                }
-            });
-        } else {
-            getFile();
-        }
-    });
+exports.activeStreamFilename = '_active.svg';
+function getTargetActiveFilename(targetId, path) {
+    if (!path) {
+        path = getTargetPath(targetId);
+    }
+
+    return path + '/' + exports.activeStreamFilename;
+}
+
+exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
+    var path, file;
+    path = getTargetPath(targetId);
+    file = getTargetActiveFilename(targetId, path);
 
     function getFile() {
         fs.open(file, 'w', function (err, fd) {
@@ -81,19 +80,20 @@ exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
             });
         });
     }
-};
 
-exports.activeStreamFilename = '_active.svg';
-function getTargetPath(targetId) {
-    return exports.svgDir + '/' + targetId;
-};
-
-function getTargetActiveFilename(targetId, path) {
-    if (!path) {
-        path = getTargetPath(targetId);
-    }
-
-    return path + '/' + exports.activeStreamFilename;
+    fs.access(path, fs.F_OK, function (err) {
+        if (err) {
+            fs.mkdir(path, function (err) {
+                if (err) {
+                    cb(err, null);
+                } else {
+                    getFile();
+                }
+            });
+        } else {
+            getFile();
+        }
+    });
 };
 
 exports.writeSegment = function writeSegment(path, segment, position, cb) {
@@ -108,8 +108,9 @@ exports.writeSegment = function writeSegment(path, segment, position, cb) {
 };
 
 exports.archiveSVG = function (activePath, targetId, cb) {
-    var filename = locationMgr.targetLastSeen[targetId].getTime() + '.svg';
-    var filepath = activePath.replace('/_active.svg', '/' + filename);
+    var filename, filepath;
+    filename = locationMgr.targetLastSeen[targetId].getTime() + '.svg';
+    filepath = activePath.replace('/_active.svg', '/' + filename);
 
     fs.rename(activePath, filepath, cb);
     return filename;
