@@ -18,18 +18,16 @@ function distanceFromLineToPoint(line, point) {
     );
 }
 
-function computeHandle(midPoint, anchor, anchorTangent, maxDistance) {
-    var tangent = 0.5 * (anchorTangent + (Math.atan2(midPoint[1] - anchor[1], midPoint[0] - anchor[0])));
-
+function computeHandle(start, end, midpoint) {
     return [
-        midPoint[0] + maxDistance * Math.sin(tangent),
-        midPoint[1] + maxDistance * Math.cos(tangent)
+        midpoint[0] * 2 - (start[0] + end[0]) / 2,
+        midpoint[1] * 2 - (start[1] + end[1]) / 2
     ];
 }
 
 var tolerance = 0.001;
 function douglasPeuckerBezier(points) {
-    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, lastPoint, anchorTangent, anchor;
+    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point;
 
     if (points.length <= 2) {
         return [points[0]];
@@ -42,7 +40,7 @@ function douglasPeuckerBezier(points) {
     // find the largest distance from intermediate poitns to this line
     maxDistance = 0;
     maxDistanceIndex = 0;
-    for (i = 1; i <= points.length - 2; i++) {
+    for (i = 0; i < points.length; i++) {
         point = points[i].coordinates;
         distance = distanceFromLineToPoint(line, point);
 
@@ -61,15 +59,9 @@ function douglasPeuckerBezier(points) {
         returnPoints = returnPoints.concat(douglasPeuckerBezier(points.slice(maxDistanceIndex, points.length)));
     } else {
         // This group of points will be clipped.
-        lastPoint = points[0].coordinates;
-        point = points[points.length - 1].coordinates;
-        anchor = points[maxDistanceIndex].coordinates;
-        anchorTangent = Math.atan2(point[1] - lastPoint[1], point[0] - lastPoint[0]);
-
         returnPoints = [{
             point: points[points.length - 1],
-            handle1: computeHandle(anchor, point, anchorTangent, maxDistance),
-            handle2: computeHandle(anchor, lastPoint, anchorTangent, maxDistance)
+            handle: computeHandle(points[0].coordinates, points[points.length - 1].coordinates, points[maxDistanceIndex].coordinates),
         }];
     }
 
@@ -100,13 +92,13 @@ module.exports = function simplifyPath(locations, color) {
 
     for (i = 0; i < anchors.length; i++) {
         point = anchors[i];
-        if (point.handle1 && point.handle2) {
-            minX = Math.min(point.point.coordinates[0], point.handle1[0], point.handle2[0], minX);
-            maxX = Math.max(point.point.coordinates[0], point.handle1[0], point.handle2[0], maxX);
-            minY = Math.min(point.point.coordinates[1], point.handle1[1], point.handle2[1], minY);
-            maxY = Math.max(point.point.coordinates[1], point.handle1[1], point.handle2[1], maxY);
+        if (point.handle) {
+            minX = Math.min(point.point.coordinates[0], point.handle[0], minX);
+            maxX = Math.max(point.point.coordinates[0], point.handle[0], maxX);
+            minY = Math.min(point.point.coordinates[1], point.handle[1], minY);
+            maxY = Math.max(point.point.coordinates[1], point.handle[1], maxY);
 
-            path.bezierCurveTo.apply(path, lineUtil.locationsToVectorPosition(point.handle1, point.handle2, point.point.coordinates));
+            path.quadraticCurveTo.apply(path, lineUtil.locationsToVectorPosition(point.handle, point.point.coordinates));
             anchors[i] = point.point;
         } else {
             minX = Math.min(point.coordinates[0], minX);

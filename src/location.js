@@ -23,10 +23,10 @@ var activeLineStyles = [
     ['douglasPeucker', 'green'],
 ];
 
-var viewBoxLength = 43; // ex: `179.999999 179.999999 179.999999 179.999999`
+var viewBoxLength = 43; // ex: `179.999999 179.999999 179.999999 179.999999"`
 var viewboxDecimals = 6;
 function computeViewBox(bounds) {
-    var i, viewBox = svgParts[1] + bounds[0] + svgParts[3] + bounds[1] + svgParts[5] + (bounds[2] - bounds[0]).toFixed(viewboxDecimals) + svgParts[7] + (bounds[3] - bounds[1]).toFixed(viewboxDecimals);
+    var i, viewBox = bounds[0] + svgParts[3] + bounds[1] + svgParts[5] + (bounds[2] - bounds[0]).toFixed(viewboxDecimals) + svgParts[7] + (bounds[3] - bounds[1]).toFixed(viewboxDecimals);
     for (i = viewBox.length; i < viewBoxLength; i++) {
         viewBox += ' ';
     }
@@ -57,7 +57,7 @@ exports.computeActiveStreamSvg = function computeActiveStreamSvg(cb) {
         if (stream.fileSize === 0) {
             writeStatus = false;
             stream.viewBox = computeViewBox(bounds);
-            writeStr = svgParts[0] + stream.viewBox + svgParts[9];
+            writeStr = svgParts[0] + svgParts[1] + stream.viewBox + svgParts[9];
             while (!writeStatus) {
                 writeStatus = stream.writeStream.write(writeStr);
             }
@@ -167,7 +167,7 @@ function handleWriteStreamFinish() {
     }
 
     if (stream.bounds !== stream.writtenBounds) {
-        locationFS.writeSegment(activeFilename, computeViewBox(stream.bounds), svgParts[0].length, rename);
+        locationFS.writeSegment(activeFilename, computeViewBox(stream.bounds), svgParts[0].length + svgParts[1].length, rename);
     } else {
         rename();
     }
