@@ -178,14 +178,6 @@ function handleWriteStreamFinish() {
     }
 }
 
-function handleWriteStreamPipe() {
-    locationMgrLogger('write', 'pipe');
-}
-
-function handleWriteStreamUnpipe() {
-    locationMgrLogger('write', 'unpipe');
-}
-
 exports.targetLastSeen = {};
 function handleIncomingMessage(message, cb) {
     var parsedMessage, targetId;
@@ -219,12 +211,7 @@ function handleIncomingMessage(message, cb) {
                     activeStreams[targetId].fileSize = details.size;
                     activeStreams[targetId].targetId = targetId;
                     activeStreams[targetId].writeStream = locationFS.createActiveStream(details.file, details.fd, details.size - svgCloseStr.length);
-                    //activeStreams[targetId].writeStream.on('close', handleWriteStreamClose);
-                    //activeStreams[targetId].writeStream.on('drain', handleWriteStreamDrain);
-                    //activeStreams[targetId].writeStream.on('error', handleWriteStreamError);
                     activeStreams[targetId].writeStream.on('finish', handleWriteStreamFinish);
-                    activeStreams[targetId].writeStream.on('pupe', handleWriteStreamPipe);
-                    activeStreams[targetId].writeStream.on('unpipe', handleWriteStreamUnpipe);
                     targetId = null;
                     cb(null);
                 }
