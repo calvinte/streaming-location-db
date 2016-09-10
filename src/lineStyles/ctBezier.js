@@ -25,7 +25,7 @@ function computeHandle(anchor, midpoint, maxDistance, direction, convex) {
         maxDistance *= -1;
     }
 
-    //first convert line to normalized unit vector
+    // Normalized/unit vector.
     deltaX = midpoint[0] - anchor[0];
     deltaY = midpoint[1] - anchor[1];
     mag = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -50,7 +50,7 @@ function computeHandle(anchor, midpoint, maxDistance, direction, convex) {
     return ret;
 }
 
-var tolerance = 0.001;
+var tolerance = 0.001; // 110.57 meters
 function douglasPeuckerBezier(points) {
     var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, midpointTangent, endpointTangent;
 
@@ -59,10 +59,8 @@ function douglasPeuckerBezier(points) {
     }
 
     returnPoints = [];
-    // make line from start to end 
     line = [points[0].coordinates, points[points.length - 1].coordinates];
 
-    // find the largest distance from intermediate poitns to this line
     maxDistance = 0;
     maxDistanceIndex = 0;
     for (i = 0; i < points.length; i++) {
@@ -70,23 +68,24 @@ function douglasPeuckerBezier(points) {
         distance = distanceFromLineToPoint(line, point);
 
         if (distance > maxDistance) {
+            // Determine point that is furthest from the line.
             maxDistance = distance;
             maxDistanceIndex = i;
         }
     }
 
-    // check if the max distance is greater than our tollerance allows 
-    if (maxDistance >= tolerance) {
+    if (maxDistance > tolerance) {
+        // Distance is beyond accepted tolerance, cut set in half and recurse.
         point = points[maxDistanceIndex].coordinates;
-        // include this point in the output 
         returnPoints = returnPoints.concat(douglasPeuckerBezier(points.slice(0, maxDistanceIndex + 1)));
-        // returnPoints.push(points[maxDistanceIndex]);
         returnPoints = returnPoints.concat(douglasPeuckerBezier(points.slice(maxDistanceIndex, points.length)));
     } else {
+        // Distance is within accepted tolerance, detail beyond here will not
+        // be persisted in the databse. Compute curve that closely matches the
+        // points which will be removed. This curve is stored with the fs-SVG.
         point = points[maxDistanceIndex].coordinates;
         endpointTangent = Math.atan2(line[1][1] - line[0][1], line[1][0] - line[0][0]);
         midpointTangent = Math.atan2(point[1] - line[0][1], point[0] - line[0][0]);
-        // This group of points will be clipped.
         returnPoints = [{
             point: points[points.length - 1],
             handle1: computeHandle(points[0].coordinates, point, maxDistance, 1, midpointTangent > endpointTangent),
@@ -116,7 +115,6 @@ module.exports = function simplifyPath(locations, color) {
     minY = maxY = prevAnchor[1];
 
     anchors = douglasPeuckerBezier(locations);
-    // always have to push the very last point on so it doesn't get left off
     anchors.push(locations[locations.length - 1]);
 
     for (i = 0; i < anchors.length; i++) {
@@ -127,7 +125,6 @@ module.exports = function simplifyPath(locations, color) {
             minY = Math.min(point.point.coordinates[1], point.handle1[1], point.handle2[1], minY);
             maxY = Math.max(point.point.coordinates[1], point.handle1[1], point.handle2[1], maxY);
 
-            //path.quadraticCurveTo.apply(path, lineUtil.locationsToVectorPosition(point.handle, point.point.coordinates));
             path.bezierCurveTo.apply(path, lineUtil.locationsToVectorPosition(point.handle1, point.handle2, point.point.coordinates));
             anchors[i] = point.point;
         } else {
