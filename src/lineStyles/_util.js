@@ -1,6 +1,10 @@
 exports.lineStylesLogger = require('../logger').Logger('lineStyles');
 exports.svgDecimalPrecision = 5;
 
+exports.geolibToJson = function geolibToJson(geolibObj) {
+    return [geolibObj.longitude, geolibObj.latitude]
+}
+
 exports.getSqDist = function getSqDist(p1, p2) {
     var dx = p1[0] - p2[0],
     dy = p1[1] - p2[1];
@@ -31,4 +35,14 @@ exports.locationsToVectorPosition = function locationsToVectorPosition() {
 exports.pathToSvg = function pathToSvg(path, color) {
     return '<path d="' + path.toString() + '" fill="none" stroke="' + color + '" stroke-width="0.00005" />';
 };
+
+exports.rotate = function rotate(cx, cy, x, y, radians) {
+    var cos = Math.cos(radians);
+    var sin = Math.sin(radians);
+    return [
+        (cos * (x - cx)) + (sin * (y - cy)) + cx,
+        (cos * (y - cy)) - (sin * (x - cx)) + cy
+    ]
+}
+
 

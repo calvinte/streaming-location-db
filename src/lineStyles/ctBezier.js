@@ -137,11 +137,11 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
     var handleDistance = null;
     var bounds, boundsRatio;
 
-    var avgCenter = geolibToJson(geolib.getCenter(skippedPointsGroup));
-    var geoCenter = geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
+    var avgCenter = lineUtil.geolibToJson(geolib.getCenter(skippedPointsGroup));
+    var geoCenter = lineUtil.geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
 
     skippedPointsGroup = _.map(skippedPointsGroup, function (point) {
-        return rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
+        return lineUtil.rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
     });
 
     bounds = geolib.getBounds(skippedPointsGroup);
@@ -162,18 +162,5 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
     } else {
         return avgCenter;
     }
-}
-
-function rotate(cx, cy, x, y, radians) {
-    var cos = Math.cos(radians);
-    var sin = Math.sin(radians);
-    return [
-        (cos * (x - cx)) + (sin * (y - cy)) + cx,
-        (cos * (y - cy)) - (sin * (x - cx)) + cy
-    ]
-}
-
-function geolibToJson(geolibObj) {
-    return [geolibObj.longitude, geolibObj.latitude]
 }
 

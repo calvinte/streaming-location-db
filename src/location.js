@@ -18,9 +18,10 @@ var clientTargetMap = {};
 var svgCloseStr = '</svg>';
 var svgParts = ['<svg version="1.1" baseProfile="full" ', 'viewBox="', null, ' ', null, ' ', null, ' ', null, '" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">', svgCloseStr];
 var activeLineStyles = [
+    ['ctBezier', 'pink'],
+    //['douglasPeucker', 'green'],
     ['raw', 'red'],
-    ['ctBezier', 'black'],
-    ['douglasPeucker', 'green'],
+    ['ctBezier2', 'black'],
 ];
 
 var viewBoxLength = 43; // ex: `179.999999 179.999999 179.999999 179.999999`
