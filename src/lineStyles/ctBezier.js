@@ -48,7 +48,7 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, maxDistance) {
 }
 
 var tolerance = 0.001;
-function douglasPeucker(points) {
+function douglasPeuckerBezier(points) {
     var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, lastPoint, anchorTangent, halfIdx, sliceHalfBiasCeil = false;
 
     if (points.length <= 2) {
@@ -76,9 +76,9 @@ function douglasPeucker(points) {
     if (maxDistance >= tolerance) {
         point = points[maxDistanceIndex].coordinates;
         // include this point in the output 
-        returnPoints = returnPoints.concat(douglasPeucker(points.slice(0, maxDistanceIndex + 1)));
+        returnPoints = returnPoints.concat(douglasPeuckerBezier(points.slice(0, maxDistanceIndex + 1)));
         // returnPoints.push(points[maxDistanceIndex]);
-        returnPoints = returnPoints.concat(douglasPeucker(points.slice(maxDistanceIndex, points.length)));
+        returnPoints = returnPoints.concat(douglasPeuckerBezier(points.slice(maxDistanceIndex, points.length)));
     } else {
         // This group of points will be clipped.
         lastPoint = points[0].coordinates;
@@ -120,7 +120,7 @@ module.exports = function simplifyPath(locations, color) {
     minX = maxX = prevAnchor[0];
     minY = maxY = prevAnchor[1];
 
-    anchors = douglasPeucker(locations);
+    anchors = douglasPeuckerBezier(locations);
     // always have to push the very last point on so it doesn't get left off
     anchors.push(locations[locations.length - 1]);
 
