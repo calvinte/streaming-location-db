@@ -140,7 +140,7 @@ function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnch
     var avgCenter = geolibToJson(geolib.getCenter(skippedPointsGroup));
     var geoCenter = geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
 
-    skippedPointsGroup = _.map(skippedPointsGroup, function(point) {
+    skippedPointsGroup = _.map(skippedPointsGroup, function (point) {
         return rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
     });
 

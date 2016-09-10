@@ -14,10 +14,10 @@ exports.fsSetupStatusList = [
 exports.svgDir = './.svg_db';
 exports.setupSvgFs = function setupSvgFs(cb) {
     exports.svgDirStatus = exports.fsSetupStatusList[0];
-    fs.access(exports.svgDir, fs.F_OK, function(err) {
+    fs.access(exports.svgDir, fs.F_OK, function (err) {
         if (err) {
             exports.svgDirStatus = exports.fsSetupStatusList[1];
-            fs.mkdir(exports.svgDir, function(err) {
+            fs.mkdir(exports.svgDir, function (err) {
                 if (err) {
                     exports.svgDirStatus = exports.fsSetupStatusList[3];
                     fsLogger('mkdir', 'err');
@@ -46,9 +46,9 @@ exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
     var path = getTargetPath(targetId);
     var file = getTargetActiveFilename(targetId, path);
 
-    fs.access(path, fs.F_OK, function(err) {
+    fs.access(path, fs.F_OK, function (err) {
         if (err) {
-            fs.mkdir(path, function(err) {
+            fs.mkdir(path, function (err) {
                 if (err) {
                     cb(err, null);
                 } else {
@@ -61,13 +61,13 @@ exports.getTargetWriteStream = function getTargetWriteStream(targetId, cb) {
     });
 
     function getFile() {
-        fs.open(file, 'w', function(err, fd) {
+        fs.open(file, 'w', function (err, fd) {
             if (err) {
                 cb(err, null);
                 return;
             }
 
-            fs.fstat(fd, function(err, stats) {
+            fs.fstat(fd, function (err, stats) {
                 if (err) {
                     cb(err, null);
                     return;
@@ -97,7 +97,7 @@ function getTargetActiveFilename(targetId, path) {
 };
 
 exports.writeSegment = function writeSegment(path, segment, position, cb) {
-    fs.open(path, 'r+', function(err, fd) {
+    fs.open(path, 'r+', function (err, fd) {
         if (err) {
             fsLogger('archive', 'err');
             return;
@@ -107,7 +107,7 @@ exports.writeSegment = function writeSegment(path, segment, position, cb) {
     });
 };
 
-exports.archiveSVG = function(activePath, targetId, cb) {
+exports.archiveSVG = function (activePath, targetId, cb) {
     var filename = locationMgr.targetLastSeen[targetId].getTime() + '.svg';
     var filepath = activePath.replace('/_active.svg', '/' + filename);
 

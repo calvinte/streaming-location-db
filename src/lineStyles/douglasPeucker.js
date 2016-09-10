@@ -39,16 +39,16 @@ module.exports = function simplifyPath(locations, color) {
     };
 };
 
-var Vector = function(x, y) {
+var Vector = function (x, y) {
     this.x = x;
     this.y = y;
 
 };
-var Line = function(p1, p2) {
+var Line = function (p1, p2) {
     this.p1 = p1;
     this.p2 = p2;
 
-    this.distanceToPoint = function(point) {
+    this.distanceToPoint = function (point) {
         // slope
         var m = (this.p2[1] - this.p1[1]) / (this.p2[0] - this.p1[0]),
         // y offset
@@ -61,7 +61,7 @@ var Line = function(p1, p2) {
         // distance to p2
         d.push(Math.sqrt(Math.pow((point[0] - this.p2[0]), 2) + Math.pow((point[1] - this.p2[1]), 2)));
         // return the smallest distance
-        return d.sort(function(a, b) {
+        return d.sort(function (a, b) {
             return (a - b); //causes an array to be sorted numerically and ascending
         })[0];
     };
