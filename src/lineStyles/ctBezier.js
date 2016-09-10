@@ -1,116 +1,149 @@
+'use strict';
+
 var d3 = require('d3');
 var geolib = require('geolib');
 var _ = require('underscore');
 var lineUtil = require('./_util');
 
-module.exports = function ctBezier(points, color) {
-    var i, point = null, skippedPoints = null;
+function distanceFromLineToPoint(line, point) {
+    var slope, yOffset;
 
-    var anchorRequired = false;
-    var anchorTangent = null, pointTangent = null, deltaT = null, cumulativeDeltaT = 0;
-    var sqPointDistance = null, cumulativeAnchorDistance = null, distanceMultiplier = null;
-    var radianThreshold = null;
+    slope = (line[1][1] - line[0][1]) / (line[1][0] - line[0][0]);
+    yOffset = line[0][1] - (slope * line[0][0]);
 
-    var skippedPointsGroup = null ;
+    return Math.min(
+        Math.abs(point[1] - (slope * point[0]) - yOffset) / Math.sqrt(Math.pow(slope, 2) + 1),
+        Math.sqrt(lineUtil.getSqDist(point, line[0])),
+        Math.sqrt(lineUtil.getSqDist(point, line[1]))
+    );
+}
 
-    var spliceIdx, spliceBiasCeil = true, handles = new Array(2);
-    var minX, maxX, minY, maxY;
+function computeHandle(skippedPointsGroup, anchorTangent, anchor) {
+    var avgCenter, geoCenter, centersTangent, centersDistance, handleDistance, bounds, boundsRatio, ret;
 
-    var prevAnchor, prevPoint, anchors;
-    var path = d3.path();
+    avgCenter = lineUtil.geolibToJson(geolib.getCenter(skippedPointsGroup));
+    geoCenter = lineUtil.geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
 
-    if (points.lastAnchor) {
-        prevAnchor = points.lastAnchor.coordinates;
-        anchors = [points.lastAnchor];
+    skippedPointsGroup = _.map(skippedPointsGroup, function (point) {
+        return lineUtil.rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
+    });
+
+    centersDistance = lineUtil.getSqDist(avgCenter, geoCenter);
+    if (centersDistance) {
+        bounds = geolib.getBounds(skippedPointsGroup);
+        boundsRatio = (bounds.maxLng - bounds.minLng) / (bounds.maxLat - bounds.minLat);
+    }
+
+    if (centersDistance && boundsRatio) {
+        if (boundsRatio < 1) {
+            boundsRatio = 1 / boundsRatio;
+        }
+        centersTangent = anchorTangent + (Math.atan2(avgCenter[1] - geoCenter[1], avgCenter[0] - geoCenter[0]));
+        handleDistance = Math.sqrt(centersDistance * Math.log(boundsRatio));
+        ret = [
+            avgCenter[0] + handleDistance * Math.sin(centersTangent),
+            avgCenter[1] + handleDistance * Math.cos(centersTangent)
+        ];
     } else {
-        prevAnchor = points[0].coordinates;
-        anchors = [points[0]];
+        ret = geoCenter;
+    }
+    return ret;
+}
+
+var tolerance = 0.001;
+function douglasPeucker(points) {
+    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, lastPoint, anchorTangent, halfIdx, sliceHalfBiasCeil = false;
+
+    if (points.length <= 2) {
+        return [points[0]];
+    }
+
+    returnPoints = [];
+    // make line from start to end 
+    line = [points[0].coordinates, points[points.length - 1].coordinates];
+
+    // find the largest distance from intermediate poitns to this line
+    maxDistance = 0;
+    maxDistanceIndex = 0;
+    for (i = 1; i <= points.length - 2; i++) {
+        point = points[i].coordinates;
+        distance = distanceFromLineToPoint(line, point);
+
+        if (distance > maxDistance) {
+            maxDistance = distance;
+            maxDistanceIndex = i;
+        }
+    }
+
+    // check if the max distance is greater than our tollerance allows 
+    if (maxDistance >= tolerance) {
+        point = points[maxDistanceIndex].coordinates;
+        // include this point in the output 
+        returnPoints = returnPoints.concat(douglasPeucker(points.slice(0, maxDistanceIndex + 1)));
+        // returnPoints.push(points[maxDistanceIndex]);
+        returnPoints = returnPoints.concat(douglasPeucker(points.slice(maxDistanceIndex, points.length)));
+    } else {
+        // This group of points will be clipped.
+        lastPoint = points[0].coordinates;
+        point = points[points.length - 1].coordinates;
+        anchorTangent = Math.atan2(point[1] - lastPoint[1], point[0] - lastPoint[0]);
+        if (sliceHalfBiasCeil) {
+            halfIdx = Math.ceil(points.length / 2);
+            sliceHalfBiasCeil = false;
+        } else {
+            halfIdx = Math.floor(points.length / 2);
+            sliceHalfBiasCeil = true;
+        }
+
+        returnPoints = [{
+            point: points[points.length - 1],
+            handle1: computeHandle(_.pluck(points.slice(0, halfIdx), 'coordinates'), anchorTangent, lastPoint),
+            handle2: computeHandle(_.pluck(points.slice(halfIdx, points.length), 'coordinates'), anchorTangent, point)
+        }];
+    }
+
+    return returnPoints;
+}
+
+
+module.exports = function simplifyPath(locations, color) {
+    var i, anchors, minX, maxX, minY, maxY, prevAnchor, path, point;
+
+    path = d3.path();
+
+    if (locations.lastAnchor) {
+        prevAnchor = locations.lastAnchor.coordinates;
+        anchors = [locations.lastAnchor];
+    } else {
+        prevAnchor = locations[0].coordinates;
+        anchors = [locations[0]];
     }
 
     path.moveTo.apply(path, lineUtil.locationsToVectorPosition(prevAnchor));
-
     minX = maxX = prevAnchor[0];
     minY = maxY = prevAnchor[1];
-    prevPoint = prevAnchor;
 
-    for (i = points.lastAnchor ? 0 : 1; i < points.length; i++) {
-        point = points[i].coordinates;
+    anchors = douglasPeucker(locations);
+    // always have to push the very last point on so it doesn't get left off
+    anchors.push(locations[locations.length - 1]);
 
-        anchorRequired = i === points.length - 1; // Last point?
-        anchorTangent = Math.atan2(point[1] - prevAnchor[1], point[0] - prevAnchor[0]);
+    for (i = 0; i < anchors.length; i++) {
+        point = anchors[i];
+        if (point.handle1 && point.handle2) {
+            minX = Math.min(point.point.coordinates[0], point.handle1[0], point.handle2[0], minX);
+            maxX = Math.max(point.point.coordinates[0], point.handle1[0], point.handle2[0], maxX);
+            minY = Math.min(point.point.coordinates[1], point.handle1[1], point.handle2[1], minY);
+            maxY = Math.max(point.point.coordinates[1], point.handle1[1], point.handle2[1], maxY);
 
-        if (!anchorRequired) {
-            sqPointDistance = lineUtil.getSqDist(point, prevPoint);
-            cumulativeAnchorDistance += sqPointDistance;
-
-            if (cumulativeAnchorDistance > sqDistanceEdges[0]) {
-                pointTangent = Math.atan2(point[1] - prevPoint[1], point[0] - prevPoint[0]);
-                deltaT = Math.abs(anchorTangent - pointTangent);
-                cumulativeDeltaT += deltaT;
-
-                distanceMultiplier = Math.max(cumulativeAnchorDistance - sqDistanceEdges[0], sqDistanceEdges[0]) / sqDistanceEdges[1];
-                radianThreshold = radianEdges[0] + deltaRadianEdges * distanceMultiplier;
-
-                if (Math.abs(cumulativeDeltaT) > radianThreshold) {
-                    // Delta angle exceeds minimum, draw an anchor.
-                    anchorRequired = true;
-                }
-            }
-        }
-
-        minX = Math.min(point[0], minX);
-        maxX = Math.max(point[0], maxX);
-        minY = Math.min(point[1], minY);
-        maxY = Math.max(point[1], maxY);
-
-        if (skippedPoints === null && anchorRequired) {
-            // Draw new point, straight line
-            anchors.push(points[i]);
-            prevAnchor = point;
-
-            path.lineTo.apply(path, lineUtil.locationsToVectorPosition(point));
-        } else if (anchorRequired) {
-            if (skippedPoints.length === 1) {
-                // qudratic curve to makes nice curves, but they dont serve to
-                // reduce file size..
-                //path.quadraticCurveTo.apply(path, lineUtil.locationsToVectorPosition(skippedPoints[0], point));
-                path.lineTo.apply(path, lineUtil.locationsToVectorPosition(skippedPoints[0]));
-                path.lineTo.apply(path, lineUtil.locationsToVectorPosition(point));
-            } else {
-                if (spliceBiasCeil) {
-                    spliceIdx = Math.ceil(skippedPoints.length / 2);
-                    spliceBiasCeil = false;
-                } else {
-                    spliceIdx = Math.floor(skippedPoints.length / 2);
-                    spliceBiasCeil = true;
-                }
-
-                handles[0] = computeHandle(skippedPoints.slice(0, spliceIdx), anchorTangent, prevAnchor, cumulativeAnchorDistance);
-                handles[1] = computeHandle(skippedPoints.slice(spliceIdx, skippedPoints.length), anchorTangent, point, cumulativeAnchorDistance);
-
-                path.bezierCurveTo.apply(path, lineUtil.locationsToVectorPosition(handles[0], handles[1], point));
-            }
-
-            // Draw new point, average skipped points as bezier
-            anchors.push(points[i]);
-            prevAnchor = point;
-
-            skippedPoints = spliceIdx = handles[0] = handles[1] = null;
-        } else if (skippedPoints === null) {
-            // Too close; we have skipped one point.
-            skippedPoints = [point];
+            path.bezierCurveTo.apply(path, lineUtil.locationsToVectorPosition(point.handle1, point.handle2, point.point.coordinates));
+            anchors[i] = point.point;
         } else {
-            // Too close; we have skipped many points.
-            skippedPoints.push(point);
+            minX = Math.min(point.coordinates[0], minX);
+            maxX = Math.max(point.coordinates[0], maxX);
+            minY = Math.min(point.coordinates[1], minY);
+            maxY = Math.max(point.coordinates[1], maxY);
+            path.lineTo.apply(path, lineUtil.locationsToVectorPosition(point.coordinates));
         }
-
-        if (anchorRequired) {
-            cumulativeDeltaT = 0;
-            cumulativeAnchorDistance = 0;
-        }
-
-        prevPoint = point;
-        point = anchorRequired = anchorTangent = pointTangent = deltaT = spliceIdx = spliceBiasCeil = null;
     }
 
     return {
@@ -118,49 +151,5 @@ module.exports = function ctBezier(points, color) {
         bounds: lineUtil.locationsToVectorPosition([minX, minY], [maxX, maxY]),
         path: lineUtil.pathToSvg(path, color)
     };
-}
-
-var radianEdges = [
-    Math.PI,
-    90 / 180 * Math.PI,
-];
-var deltaRadianEdges = radianEdges[0] - radianEdges[1];
-
-var sqDistanceEdges = [
-    Math.pow(0.0001, 2), // ~11.06 meters
-    Math.pow(0.01, 2), // ~1105.74 meters
-];
-
-function computeHandle(skippedPointsGroup, anchorTangent, anchor, cumulativeAnchorDistance) {
-    var avgCenter, geoCenter;
-    var centersTangent, centersDistance;
-    var handleDistance = null;
-    var bounds, boundsRatio;
-
-    var avgCenter = lineUtil.geolibToJson(geolib.getCenter(skippedPointsGroup));
-    var geoCenter = lineUtil.geolibToJson(geolib.getCenterOfBounds(skippedPointsGroup));
-
-    skippedPointsGroup = _.map(skippedPointsGroup, function (point) {
-        return lineUtil.rotate(anchor[0], anchor[1], point[0], point[1], anchorTangent);
-    });
-
-    bounds = geolib.getBounds(skippedPointsGroup);
-    boundsRatio = (bounds.maxLng - bounds.minLng)/(bounds.maxLat - bounds.minLat);
-
-    if (boundsRatio) {
-        if (boundsRatio < 1) {
-            boundsRatio = 1/boundsRatio;
-        }
-
-        centersDistance = lineUtil.getSqDist(avgCenter, geoCenter);
-        centersTangent = 0.5 * (anchorTangent/2 + Math.atan2(anchor[1] - geoCenter[1], anchor[0] - geoCenter[0]));
-        handleDistance = Math.sqrt(Math.min(centersDistance * boundsRatio, cumulativeAnchorDistance/2));
-        return [
-            avgCenter[0] + handleDistance * Math.sin(centersTangent),
-            avgCenter[1] + handleDistance * Math.cos(centersTangent)
-        ];
-    } else {
-        return avgCenter;
-    }
-}
+};
 
