@@ -287,6 +287,8 @@ exports.stream.onClientClose(function (clientSocketIndex) {
     for (targetId in clientTargetMap[clientSocketIndex]) {
         if (clientTargetMap[clientSocketIndex].hasOwnProperty(targetId)) {
             if (activeStreams[targetId] && activeStreams[targetId].writeStream) {
+                // @TODO finish SVG. Currently we clip the last 0-16 seconds of
+                // streaming information.
                 activeStreams[targetId].fileSize += svgCloseStr.length;
                 activeStreams[targetId].writeStream.end(svgCloseStr);
             }
