@@ -52,7 +52,7 @@ function computeHandle(anchor, midpoint, maxDistance, direction, convex) {
 
 var tolerance = 0.001; // 110.57 meters
 function douglasPeuckerBezier(points) {
-    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, midpointTangent, endpointTangent;
+    var returnPoints, line, distance, maxDistance, maxDistanceIndex, i, point, midpointTangent, endpointTangent, convex;
 
     if (points.length <= 2) {
         return [points[0]];
@@ -86,10 +86,20 @@ function douglasPeuckerBezier(points) {
         point = points[maxDistanceIndex].coordinates;
         endpointTangent = Math.atan2(line[1][1] - line[0][1], line[1][0] - line[0][0]);
         midpointTangent = Math.atan2(point[1] - line[0][1], point[0] - line[0][0]);
+        if (endpointTangent < 0) {
+            if (midpointTangent < 0) {
+                convex = endpointTangent + Math.PI < midpointTangent + Math.PI;
+            } else {
+                convex = endpointTangent + Math.PI < midpointTangent;
+            }
+        } else {
+            convex = endpointTangent < midpointTangent;
+        }
+
         returnPoints = [{
             point: points[points.length - 1],
-            handle1: computeHandle(points[0].coordinates, point, maxDistance, 1, midpointTangent > endpointTangent),
-            handle2: computeHandle(points[points.length - 1].coordinates, point, maxDistance, -1, midpointTangent > endpointTangent),
+            handle1: computeHandle(points[0].coordinates, point, maxDistance, 1, convex),
+            handle2: computeHandle(points[points.length - 1].coordinates, point, maxDistance, -1, convex),
         }];
     }
 
