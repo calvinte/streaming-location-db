@@ -10,13 +10,13 @@ var model = require('./model');
 var locationFs = require('./filesystem');
 var psqlLogger = require('./logger').Logger('psql');
 
-// CREATE DATABASE streaming_location_svg;
-// \c streaming_location_svg;
+// CREATE DATABASE streaming_locations;
+// \c streaming_locations;
 // CREATE EXTENSION Postgis;
 // CREATE EXTENSION "uuid-ossp";
 //
 // again later..
-// SELECT filename, target, lineStyle, array_length(locations, 1), FROM pathref;
+// SELECT filename, target, lineStyle, SUM(array_length(locations, 1)) FROM pathref GROUP BY filename, target, lineStyle;
 //
 // fresh state:
 // rm -rf .svg_db
@@ -36,7 +36,7 @@ exports.connectPsql = function connectPsql(cb) {
     var config, client;
     exports.pgStatus = exports.pgConnectionStatusList[0];
     config = {
-        database: 'streaming_location_svg',
+        database: 'streaming_locations',
         host: 'localhost',
         password: '',
         port: 5432,
